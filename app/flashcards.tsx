@@ -2,11 +2,13 @@ import { useCallback, useState } from "react";
 import { View, Text, TouchableOpacity, FlatList, Alert } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
+import { Feather } from "@expo/vector-icons";
 
+import { useTheme } from "../contexts/ThemeContext";
+import { useSharedStyles } from "../hooks/useSharedStyles";
 import * as categoryService from "../services/categories";
 import * as flashcardService from "../services/flashcards";
 import { ApiClientError } from "../services/api";
-import { shared } from "../constants/styles";
 import FlashcardFormModal from "../components/FlashcardFormModal";
 import type { Flashcard } from "../types/flashcard";
 
@@ -16,6 +18,10 @@ export default function FlashcardsScreen() {
     categoryName?: string;
     languagePairId: string;
   }>();
+  
+  const { colors } = useTheme();
+  const shared = useSharedStyles();
+  
   const catId = Number(categoryId);
   const pairId = Number(languagePairId);
 
@@ -38,21 +44,10 @@ export default function FlashcardsScreen() {
     }
   }, [catId]);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load])
-  );
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const openCreate = () => {
-    setEditingCard(null);
-    setFormVisible(true);
-  };
-
-  const openEdit = (card: Flashcard) => {
-    setEditingCard(card);
-    setFormVisible(true);
-  };
+  const openCreate = () => { setEditingCard(null); setFormVisible(true); };
+  const openEdit = (card: Flashcard) => { setEditingCard(card); setFormVisible(true); };
 
   const handleSaved = (saved: Flashcard) => {
     setCards((prev) => {
@@ -65,15 +60,12 @@ export default function FlashcardsScreen() {
     Alert.alert("Delete flashcard", `Delete "${card.text}"?`, [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Delete",
-        style: "destructive",
+        text: "Delete", style: "destructive",
         onPress: async () => {
           try {
             await flashcardService.deleteFlashcard(card.id);
             setCards((prev) => prev.filter((c) => c.id !== card.id));
-          } catch (e) {
-            setError(e instanceof ApiClientError ? e.detail : "Failed to delete flashcard.");
-          }
+          } catch (e) { setError(e instanceof ApiClientError ? e.detail : "Failed to delete flashcard."); }
         },
       },
     ]);
@@ -81,7 +73,12 @@ export default function FlashcardsScreen() {
 
   return (
     <View style={shared.container}>
-      {categoryName ? <Text style={shared.subtitle}>{categoryName}</Text> : null}
+      {categoryName ? (
+        <Text style={[shared.title, { textAlign: "left", fontSize: 24, marginBottom: 8 }]}>
+          {categoryName}
+        </Text>
+      ) : null}
+      
       {error && <Text style={shared.error}>{error}</Text>}
 
       <FlatList
@@ -89,39 +86,45 @@ export default function FlashcardsScreen() {
         keyExtractor={(item) => String(item.id)}
         refreshing={isLoading}
         onRefresh={load}
-        ListEmptyComponent={
-          !isLoading ? <Text style={shared.empty}>No flashcards yet — add one below.</Text> : null
-        }
+        contentContainerStyle={{ paddingBottom: 80 }}
+        ListEmptyComponent={!isLoading ? <Text style={shared.empty}>No flashcards yet — add one below.</Text> : null}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={{ backgroundColor: "#f3f4f6", borderRadius: 8, padding: 16, marginBottom: 8 }}
+            style={[shared.row, { borderRadius: 12, flexDirection: "column", alignItems: "flex-start", gap: 6 }]}
             onPress={() => openEdit(item)}
             onLongPress={() => handleDelete(item)}
           >
-            <Text style={{ fontSize: 16, fontWeight: "600" }}>{item.text}</Text>
+            <Text style={{ fontSize: 18, fontWeight: "700", color: colors.text }}>{item.text}</Text>
             {item.translations.length > 0 && (
-              <Text style={shared.hint}>{item.translations.join(", ")}</Text>
+              <Text style={[shared.hint, { fontSize: 14 }]}>{item.translations.join(", ")}</Text>
             )}
           </TouchableOpacity>
         )}
       />
-      {cards.length > 0 && <Text style={shared.hint}>Tap to edit · long-press to delete</Text>}
 
+      {cards.length > 0 && <Text style={[shared.hint, { textAlign: "center", marginBottom: 16 }]}>Tap to edit · long-press to delete</Text>}
+
+      {/* Кнопка FAB */}
       <TouchableOpacity
         style={{
           position: "absolute",
           right: 24,
           bottom: 24,
-          width: 56,
-          height: 56,
-          borderRadius: 28,
-          backgroundColor: "#2563eb",
+          width: 60,
+          height: 60,
+          borderRadius: 30,
+          backgroundColor: colors.primary,
+          shadowColor: colors.primary,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 5,
           alignItems: "center",
           justifyContent: "center",
         }}
         onPress={openCreate}
       >
-        <Text style={{ color: "#fff", fontSize: 28, lineHeight: 28 }}>+</Text>
+        <Feather name="plus" size={32} color="#fff" />
       </TouchableOpacity>
 
       <FlashcardFormModal

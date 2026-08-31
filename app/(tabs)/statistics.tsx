@@ -1,11 +1,12 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, RefreshControl, ActivityIndicator, SafeAreaView } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 
 import { useLanguagePair } from "../../contexts/LanguagePairContext";
+import { useTheme } from "../../contexts/ThemeContext";
+import { useSharedStyles } from "../../hooks/useSharedStyles";
 import * as statsService from "../../services/stats";
 import { ApiClientError } from "../../services/api";
-import { shared } from "../../constants/styles";
 import { languageLabel } from "../../constants/languages";
 
 import StreakHero from "../../components/stats/StreakHero";
@@ -29,6 +30,8 @@ import type {
 
 export default function StatisticsScreen() {
   const { activePair } = useLanguagePair();
+  const { colors } = useTheme();
+  const shared = useSharedStyles();
 
   const [overview, setOverview] = useState<StatsOverview | null>(null);
   const [languages, setLanguages] = useState<LanguageStat[]>([]);
@@ -40,10 +43,6 @@ export default function StatisticsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Overview/languages/recent-activity are global (across all pairs).
-  // Trend/categories/difficult-cards are scoped to whichever pair is
-  // currently active — reuses the same activePair the rest of the app
-  // already relies on, instead of giving Statistics its own pair switcher.
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -82,9 +81,9 @@ export default function StatisticsScreen() {
 
   if (isLoading && !overview) {
     return (
-      <View style={shared.center}>
-        <ActivityIndicator size="large" />
-      </View>
+      <SafeAreaView style={shared.center}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </SafeAreaView>
     );
   }
 
@@ -92,67 +91,79 @@ export default function StatisticsScreen() {
     ? `${languageLabel(activePair.native_language)} → ${languageLabel(activePair.learning_language)}`
     : null;
 
+  // Компонент для красивых заголовков секций
+  const SectionTitle = ({ title }: { title: string }) => (
+    <Text style={{ 
+      fontSize: 13, 
+      fontWeight: "700", 
+      color: colors.textMuted, 
+      textTransform: "uppercase", 
+      letterSpacing: 1.2, 
+      marginBottom: 8,
+      marginLeft: 4
+    }}>
+      {title}
+    </Text>
+  );
+
   return (
-    <ScrollView
-      contentContainerStyle={{ padding: 24, gap: 24 }}
-      refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} />}
-    >
-      {error && <Text style={shared.error}>{error}</Text>}
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+      <ScrollView
+        contentContainerStyle={{ padding: 24, gap: 32 }}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} tintColor={colors.primary} />}
+      >
+        {error && <Text style={[shared.error, { marginBottom: 16 }]}>{error}</Text>}
 
-      {overview && (
-        <>
-          <StreakHero current={overview.streak.current} longest={overview.streak.longest} />
+        {overview && (
+          <View style={{ gap: 24 }}>
+            <StreakHero current={overview.streak.current} longest={overview.streak.longest} />
+            <ReviewSummaryRow today={overview.reviews.today} week={overview.reviews.week} month={overview.reviews.month} />
+            
+            <View>
+              <SectionTitle title="Your deck" />
+              <CardsCompositionBar
+                total={overview.cards.total}
+                learned={overview.cards.learned}
+                learning={overview.cards.learning}
+                newCount={overview.cards.new}
+              />
+            </View>
 
-          <ReviewSummaryRow
-            today={overview.reviews.today}
-            week={overview.reviews.week}
-            month={overview.reviews.month}
-          />
-
-          <View style={{ gap: 8 }}>
-            <Text style={shared.subtitle}>Your deck</Text>
-            <CardsCompositionBar
-              total={overview.cards.total}
-              learned={overview.cards.learned}
-              learning={overview.cards.learning}
-              newCount={overview.cards.new}
-            />
+            <AccuracyBadge accuracy={overview.accuracy} />
           </View>
+        )}
 
-          <AccuracyBadge accuracy={overview.accuracy} />
-        </>
-      )}
+        {activePair && trend.length > 0 && (
+          <View>
+            <SectionTitle title={`Accuracy trend · ${pairLabel}`} />
+            <TrendChart trend={trend} />
+          </View>
+        )}
 
-      {activePair && trend.length > 0 && (
-        <View style={{ gap: 8 }}>
-          <Text style={shared.subtitle}>Accuracy trend · {pairLabel}</Text>
-          <TrendChart trend={trend} />
+        <View>
+          <SectionTitle title="Languages" />
+          <LanguageComparisonList languages={languages} />
         </View>
-      )}
 
-      <View style={{ gap: 8 }}>
-        <Text style={shared.subtitle}>Languages</Text>
-        <LanguageComparisonList languages={languages} />
-      </View>
+        {activePair && categories.length > 0 && (
+          <View>
+            <SectionTitle title={`Categories · ${pairLabel}`} />
+            <CategoryComparisonList categories={categories} />
+          </View>
+        )}
 
-      {activePair && (
-        <View style={{ gap: 8 }}>
-          <Text style={shared.subtitle}>Categories · {pairLabel}</Text>
-          <CategoryComparisonList categories={categories} />
+        {activePair && difficultCards.length > 0 && (
+          <View>
+            <SectionTitle title="Tricky words" />
+            <DifficultCardsList cards={difficultCards} />
+          </View>
+        )}
+
+        <View>
+          <SectionTitle title="Recent activity" />
+          <RecentActivityList entries={recentActivity} />
         </View>
-      )}
-
-      {activePair && (
-        <View style={{ gap: 8 }}>
-          <Text style={shared.subtitle}>Tricky words</Text>
-          <DifficultCardsList cards={difficultCards} />
-        </View>
-      )}
-
-      <View style={{ gap: 8 }}>
-        <Text style={shared.subtitle}>Recent activity</Text>
-        <RecentActivityList entries={recentActivity} />
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
