@@ -1,33 +1,37 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
+import { Tabs } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from "../../contexts/ThemeContext";
+import AccountMenuButton from "../../components/AccountMenuButton";
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function TabsLayout() {
+  const { colors } = useTheme();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
+        headerStyle: { backgroundColor: colors.headerBackground },
+        headerTintColor: colors.headerTint,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.tabBarInactive,
+        tabBarStyle: { backgroundColor: colors.tabBarBackground, borderTopColor: colors.border },
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: "Home",
+          tabBarIcon: ({ color, size }) => <Ionicons name="home" color={color} size={size} />,
+          headerRight: () => <AccountMenuButton />,
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="statistics"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: "Statistics",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="stats-chart" color={color} size={size} />
+          ),
         }}
       />
     </Tabs>
