@@ -24,9 +24,6 @@ export default function RootNavigator() {
   }, [isAuthenticated, isLoading, segments, router]);
 
   if (isLoading) {
-    // Waiting on the initial "do we have a stored session?" check from
-    // AuthContext — avoids a flash of the login screen for already
-    // logged-in users on cold start.
     return (
       <View
         style={{
@@ -44,15 +41,37 @@ export default function RootNavigator() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: colors.headerBackground },
+        headerStyle: {
+          backgroundColor: colors.headerBackground,
+        },
         headerTintColor: colors.headerTint,
-        contentStyle: { backgroundColor: colors.background },
+        contentStyle: {
+          backgroundColor: colors.background,
+        },
       }}
     >
-      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="flashcards" options={{ title: "Flashcards" }} />
-      <Stack.Screen name="session" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="(auth)"
+        options={{ headerShown: false }}
+      />
+
+      <Stack.Screen
+        name="(tabs)"
+        options={{ headerShown: false }}
+      />
+
+      <Stack.Screen
+        name="flashcards"
+        options={{
+          title: "Flashcards",
+          headerBackTitle: "Home",
+        }}
+      />
+
+      <Stack.Screen
+        name="session"
+        options={{ headerShown: false }}
+      />
     </Stack>
   );
 }

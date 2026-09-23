@@ -1,6 +1,14 @@
 import { useCallback, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, ActivityIndicator, SafeAreaView } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  RefreshControl,
+  ActivityIndicator,
+  SafeAreaView,
+} from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useRouter } from "expo-router";
 
 import { useLanguagePair } from "../../contexts/LanguagePairContext";
 import { useTheme } from "../../contexts/ThemeContext";
@@ -32,6 +40,7 @@ export default function StatisticsScreen() {
   const { activePair } = useLanguagePair();
   const { colors } = useTheme();
   const shared = useSharedStyles();
+  const router = useRouter();
 
   const [overview, setOverview] = useState<StatsOverview | null>(null);
   const [languages, setLanguages] = useState<LanguageStat[]>([]);
@@ -46,6 +55,7 @@ export default function StatisticsScreen() {
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+
     try {
       const requests: Promise<unknown>[] = [
         statsService.getOverview().then(setOverview),
@@ -55,9 +65,17 @@ export default function StatisticsScreen() {
 
       if (activePair) {
         requests.push(
-          statsService.getCategoryStats(activePair.id).then(setCategories),
-          statsService.getDifficultCards(activePair.id).then(setDifficultCards),
-          statsService.getAccuracyTrend(activePair.id).then(setTrend)
+          statsService
+            .getCategoryStats(activePair.id)
+            .then(setCategories),
+
+          statsService
+            .getDifficultCards(activePair.id)
+            .then(setDifficultCards),
+
+          statsService
+            .getAccuracyTrend(activePair.id)
+            .then(setTrend)
         );
       } else {
         setCategories([]);
@@ -67,7 +85,11 @@ export default function StatisticsScreen() {
 
       await Promise.all(requests);
     } catch (e) {
-      setError(e instanceof ApiClientError ? e.detail : "Failed to load statistics.");
+      setError(
+        e instanceof ApiClientError
+          ? e.detail
+          : "Failed to load statistics."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -82,45 +104,101 @@ export default function StatisticsScreen() {
   if (isLoading && !overview) {
     return (
       <SafeAreaView style={shared.center}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator
+          size="large"
+          color={colors.primary}
+        />
       </SafeAreaView>
     );
   }
 
   const pairLabel = activePair
-    ? `${languageLabel(activePair.native_language)} → ${languageLabel(activePair.learning_language)}`
+    ? `${languageLabel(activePair.native_language)} → ${languageLabel(
+        activePair.learning_language
+      )}`
     : null;
 
-  // Компонент для красивых заголовков секций
-  const SectionTitle = ({ title }: { title: string }) => (
-    <Text style={{ 
-      fontSize: 13, 
-      fontWeight: "700", 
-      color: colors.textMuted, 
-      textTransform: "uppercase", 
-      letterSpacing: 1.2, 
-      marginBottom: 8,
-      marginLeft: 4
-    }}>
+  const SectionTitle = ({
+    title,
+  }: {
+    title: string;
+  }) => (
+    <Text
+      style={{
+        fontSize: 13,
+        fontWeight: "700",
+        color: colors.textMuted,
+        textTransform: "uppercase",
+        letterSpacing: 1.2,
+        marginBottom: 8,
+        marginLeft: 4,
+      }}
+    >
       {title}
     </Text>
   );
 
+  const studyDifficultCards = () => {
+    if (!activePair) return;
+
+    router.push({
+      pathname: "/session",
+      params: {
+        languagePairId: String(activePair.id),
+        mode: "difficult",
+      },
+    });
+  };
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: colors.background,
+      }}
+    >
       <ScrollView
-        contentContainerStyle={{ padding: 24, gap: 32 }}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} tintColor={colors.primary} />}
+        contentContainerStyle={{
+          padding: 24,
+          gap: 32,
+        }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={load}
+            tintColor={colors.primary}
+          />
+        }
       >
-        {error && <Text style={[shared.error, { marginBottom: 16 }]}>{error}</Text>}
+        {error && (
+          <Text
+            style={[
+              shared.error,
+              {
+                marginBottom: 16,
+              },
+            ]}
+          >
+            {error}
+          </Text>
+        )}
 
         {overview && (
           <View style={{ gap: 24 }}>
-            <StreakHero current={overview.streak.current} longest={overview.streak.longest} />
-            <ReviewSummaryRow today={overview.reviews.today} week={overview.reviews.week} month={overview.reviews.month} />
-            
+            <StreakHero
+              current={overview.streak.current}
+              longest={overview.streak.longest}
+            />
+
+            <ReviewSummaryRow
+              today={overview.reviews.today}
+              week={overview.reviews.week}
+              month={overview.reviews.month}
+            />
+
             <View>
               <SectionTitle title="Your deck" />
+
               <CardsCompositionBar
                 total={overview.cards.total}
                 learned={overview.cards.learned}
@@ -135,33 +213,51 @@ export default function StatisticsScreen() {
 
         {activePair && trend.length > 0 && (
           <View>
-            <SectionTitle title={`Accuracy trend · ${pairLabel}`} />
+            <SectionTitle
+              title={`Accuracy trend · ${pairLabel}`}
+            />
+
             <TrendChart trend={trend} />
           </View>
         )}
 
         <View>
           <SectionTitle title="Languages" />
-          <LanguageComparisonList languages={languages} />
+
+          <LanguageComparisonList
+            languages={languages}
+          />
         </View>
 
         {activePair && categories.length > 0 && (
           <View>
-            <SectionTitle title={`Categories · ${pairLabel}`} />
-            <CategoryComparisonList categories={categories} />
+            <SectionTitle
+              title={`Categories · ${pairLabel}`}
+            />
+
+            <CategoryComparisonList
+              categories={categories}
+            />
           </View>
         )}
 
         {activePair && difficultCards.length > 0 && (
           <View>
             <SectionTitle title="Tricky words" />
-            <DifficultCardsList cards={difficultCards} />
+
+            <DifficultCardsList
+              cards={difficultCards}
+              onStudy={studyDifficultCards}
+            />
           </View>
         )}
 
         <View>
           <SectionTitle title="Recent activity" />
-          <RecentActivityList entries={recentActivity} />
+
+          <RecentActivityList
+            entries={recentActivity}
+          />
         </View>
       </ScrollView>
     </SafeAreaView>

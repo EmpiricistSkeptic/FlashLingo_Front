@@ -113,7 +113,7 @@ export default function FlashcardFormModal({
     const word = debouncedText.trim();
 
     if (
-      !word ||
+      word.length < 2 ||
       (translationsTouched && examplesTouched)
     ) {
       return;

@@ -28,8 +28,6 @@ export default function StudyCard({ card, onReview }: Props) {
   const [revealed, setRevealed] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
 
-  // Language used for text-to-speech.
-  // The flashcard text is always in the learning language.
   const learningSpeechLocale = activePair
     ? speechLocale(activePair.learning_language)
     : "en-US";
@@ -73,14 +71,21 @@ export default function StudyCard({ card, onReview }: Props) {
   };
 
   const speak = (text: string) => {
-    if (!text) return;
+    const value = text.trim();
+
+    if (!value) return;
 
     Speech.stop();
 
-    Speech.speak(text, {
+    Speech.speak(value, {
       language: learningSpeechLocale,
     });
   };
+
+  useEffect(() => {
+    if (!revealed) return;
+    speak(card.text);
+  }, [revealed]);
 
   return (
     <View style={{ flex: 1, gap: 20 }}>
@@ -106,23 +111,27 @@ export default function StudyCard({ card, onReview }: Props) {
       </View>
 
       {/* Card */}
-      <TouchableOpacity
-        activeOpacity={revealed ? 1 : 0.8}
-        onPress={!revealed ? reveal : undefined}
-        style={{
-          flex: 1,
-          backgroundColor: colors.surface,
-          borderRadius: 24,
-          padding: 24,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity:
-            colors.background === "#ffffff" ? 0.05 : 0.3,
-          shadowRadius: 12,
-          elevation: 4,
-        }}
-      >
-        {!revealed ? (
+      {!revealed ? (
+        // Closed card: tapping anywhere reveals it.
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={reveal}
+          style={{
+            flex: 1,
+            backgroundColor: colors.surface,
+            borderRadius: 24,
+            padding: 24,
+            shadowColor: "#000",
+            shadowOffset: {
+              width: 0,
+              height: 4,
+            },
+            shadowOpacity:
+              colors.background === "#ffffff" ? 0.05 : 0.3,
+            shadowRadius: 12,
+            elevation: 4,
+          }}
+        >
           <View
             style={{
               flex: 1,
@@ -151,10 +160,34 @@ export default function StudyCard({ card, onReview }: Props) {
               Tap to reveal
             </Text>
           </View>
-        ) : (
+        </TouchableOpacity>
+      ) : (
+        // Opened card: the ScrollView gets the gestures directly.
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: colors.surface,
+            borderRadius: 24,
+            padding: 24,
+            shadowColor: "#000",
+            shadowOffset: {
+              width: 0,
+              height: 4,
+            },
+            shadowOpacity:
+              colors.background === "#ffffff" ? 0.05 : 0.3,
+            shadowRadius: 12,
+            elevation: 4,
+          }}
+        >
           <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{
+              paddingBottom: 16,
+            }}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 16 }}
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
           >
             {/* 1. WORD */}
             <View
@@ -299,8 +332,8 @@ export default function StudyCard({ card, onReview }: Props) {
               </View>
             )}
           </ScrollView>
-        )}
-      </TouchableOpacity>
+        </View>
+      )}
 
       {/* Review buttons */}
       {revealed && (
