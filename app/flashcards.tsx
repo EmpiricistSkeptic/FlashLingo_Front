@@ -8,7 +8,7 @@ import {
   Modal,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import { Feather } from "@expo/vector-icons";
 
 import { useTheme } from "../contexts/ThemeContext";

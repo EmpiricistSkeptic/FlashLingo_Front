@@ -119,9 +119,12 @@ export default function TypingGame({
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={
-        Platform.OS === "ios"
-          ? "padding"
-          : undefined
+        Platform.OS === "ios" ? "padding" : "height"
+      }
+      // On iOS this offsets for any header/nav bar sitting above this
+      // screen. Tune this if the screen has a custom header height.
+      keyboardVerticalOffset={
+        Platform.OS === "ios" ? 90 : 0
       }
     >
       <ScrollView
@@ -135,7 +138,7 @@ export default function TypingGame({
         <View
           style={{
             flex: 1,
-            gap: 20,
+            gap: 16,
           }}
         >
           {/* GAME HEADER */}
@@ -145,7 +148,6 @@ export default function TypingGame({
               flexDirection: "row",
               alignItems: "center",
               gap: 10,
-              marginTop: 4,
             }}
           >
             <View
@@ -195,12 +197,10 @@ export default function TypingGame({
 
           <View
             style={{
-              flex: 1,
-              minHeight: 220,
               backgroundColor: colors.surface,
-              borderRadius: 24,
-              padding: 24,
-              justifyContent: "center",
+              borderRadius: 20,
+              paddingVertical: 22,
+              paddingHorizontal: 20,
               alignItems: "center",
               borderWidth: 1,
               borderColor: colors.border,
@@ -213,7 +213,7 @@ export default function TypingGame({
                 fontWeight: "700",
                 textTransform: "uppercase",
                 letterSpacing: 1.2,
-                marginBottom: 16,
+                marginBottom: 10,
               }}
             >
               Translate
@@ -223,7 +223,7 @@ export default function TypingGame({
               <Text
                 style={{
                   color: colors.text,
-                  fontSize: 34,
+                  fontSize: 30,
                   fontWeight: "800",
                   textAlign: "center",
                 }}

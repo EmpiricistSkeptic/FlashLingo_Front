@@ -256,9 +256,12 @@ export default function SentenceGame({
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={
-        Platform.OS === "ios"
-          ? "padding"
-          : undefined
+        Platform.OS === "ios" ? "padding" : "height"
+      }
+      // On iOS this offsets for any header/nav bar sitting above this
+      // screen. Tune this if the screen has a custom header height.
+      keyboardVerticalOffset={
+        Platform.OS === "ios" ? 90 : 0
       }
     >
       <ScrollView

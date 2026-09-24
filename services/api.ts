@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 //const API_URL = "https://flashlingo-xbdw.onrender.com/api";
-const API_URL = http://192.168.0.103:8000/api";
+const API_URL = "http://192.168.0.103:8000/api";
 
 const ACCESS_TOKEN_KEY = "flashlingo_access_token";
 const REFRESH_TOKEN_KEY = "flashlingo_refresh_token";

@@ -269,9 +269,12 @@ export default function TranslationGame({
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={
-        Platform.OS === "ios"
-          ? "padding"
-          : undefined
+        Platform.OS === "ios" ? "padding" : "height"
+      }
+      // On iOS this offsets for any header/nav bar sitting above this
+      // screen. Tune this if the screen has a custom header height.
+      keyboardVerticalOffset={
+        Platform.OS === "ios" ? 90 : 0
       }
     >
       <ScrollView
@@ -340,17 +343,53 @@ export default function TranslationGame({
             </View>
           </View>
 
+          {/* TARGET WORD */}
+
+          <View
+            style={{
+              backgroundColor:
+                colors.primary + "10",
+              borderWidth: 1,
+              borderColor:
+                colors.primary + "35",
+              borderRadius: 18,
+              padding: 18,
+              alignItems: "center",
+            }}
+          >
+            <Text
+              style={{
+                color: colors.textMuted,
+                fontSize: 11,
+                fontWeight: "800",
+                textTransform: "uppercase",
+                letterSpacing: 1.2,
+                marginBottom: 8,
+              }}
+            >
+              Target word
+            </Text>
+
+            <Text
+              style={{
+                color: colors.primary,
+                fontSize: 30,
+                fontWeight: "900",
+                textAlign: "center",
+              }}
+            >
+              {card.text}
+            </Text>
+          </View>
+
           {/* SOURCE SENTENCE */}
 
           <View
             style={{
-              flex: 1,
-              minHeight: 240,
               backgroundColor:
                 colors.surface,
-              borderRadius: 24,
-              padding: 24,
-              justifyContent: "center",
+              borderRadius: 22,
+              padding: 22,
               borderWidth: 1,
               borderColor:
                 colors.border,
@@ -372,8 +411,8 @@ export default function TranslationGame({
             <Text
               style={{
                 color: colors.text,
-                fontSize: 25,
-                lineHeight: 36,
+                fontSize: 22,
+                lineHeight: 32,
                 fontWeight: "700",
               }}
             >

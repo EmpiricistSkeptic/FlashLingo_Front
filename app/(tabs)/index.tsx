@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import {
   View,
@@ -7,11 +7,10 @@ import {
   FlatList,
   ActivityIndicator,
   Modal,
-  Switch,
 } from "react-native";
 
 import { useRouter } from "expo-router";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import { Feather } from "@expo/vector-icons";
 
 import { useLanguagePair } from "../../contexts/LanguagePairContext";
@@ -20,7 +19,6 @@ import { useSharedStyles } from "../../hooks/useSharedStyles";
 
 import * as categoryService from "../../services/categories";
 import * as flashcardService from "../../services/flashcards";
-import * as studyPreferences from "../../services/studyPreferences";
 
 import { ApiClientError } from "../../services/api";
 
@@ -30,11 +28,7 @@ import CategoryFormModal from "../../components/CategoryFormModal";
 import type { Category } from "../../types/category";
 import type { GameType } from "../../services/games";
 
-
-type StudySelection =
-  | "classic"
-  | "games";
-
+type CardSelection = "new" | "due";
 
 type StudyOptions = {
   visible: boolean;
@@ -43,27 +37,36 @@ type StudyOptions = {
   dueCount: number;
   allCaughtUp: boolean;
 
-  studySelection: StudySelection;
-  gameType: Exclude<GameType, "classic">;
+  selectedCardSelection: CardSelection | null;
+  selectedGameType: GameType;
 };
 
-
-const GAME_OPTIONS: {
-  type: Exclude<GameType, "classic">;
+const STUDY_MODE_OPTIONS: {
+  type: GameType;
   title: string;
   description: string;
-  icon: "edit-3" | "message-square" | "globe";
+  icon:
+    | "layers"
+    | "edit-3"
+    | "message-square"
+    | "globe";
 }[] = [
+  {
+    type: "classic",
+    title: "Classic",
+    description: "Standard flashcards with SRS review.",
+    icon: "layers",
+  },
   {
     type: "typing",
     title: "Typing Challenge",
-    description: "Recall the translation yourself.",
+    description: "Recall the target word yourself.",
     icon: "edit-3",
   },
   {
     type: "sentence",
     title: "Sentence Challenge",
-    description: "Use the word in your own sentence.",
+    description: "Use the target word in your own sentence.",
     icon: "message-square",
   },
   {
@@ -73,7 +76,6 @@ const GAME_OPTIONS: {
     icon: "globe",
   },
 ];
-
 
 export default function HomeScreen() {
   const {
@@ -100,12 +102,6 @@ export default function HomeScreen() {
   const [studyingCategoryId, setStudyingCategoryId] =
     useState<number | null>(null);
 
-  const [gamesEnabled, setGamesEnabled] =
-    useState(true);
-
-  const [isLoadingGamesPreference, setIsLoadingGamesPreference] =
-    useState(true);
-
   const [studyOptions, setStudyOptions] =
     useState<StudyOptions>({
       visible: false,
@@ -114,70 +110,9 @@ export default function HomeScreen() {
       dueCount: 0,
       allCaughtUp: false,
 
-      studySelection: "classic",
-
-      gameType: "typing",
+      selectedCardSelection: null,
+      selectedGameType: "classic",
     });
-
-  // ============================================================
-  // LOAD GAMES PREFERENCE
-  // ============================================================
-
-  useEffect(() => {
-    let mounted = true;
-
-    const loadGamesPreference = async () => {
-      try {
-        const enabled =
-          await studyPreferences.getGamesEnabled();
-
-        if (mounted) {
-          setGamesEnabled(enabled);
-        }
-      } catch {
-        // Keep default true if local storage fails.
-      } finally {
-        if (mounted) {
-          setIsLoadingGamesPreference(false);
-        }
-      }
-    };
-
-    loadGamesPreference();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const toggleGamesEnabled = async (
-    enabled: boolean
-  ) => {
-    setGamesEnabled(enabled);
-
-    if (!enabled) {
-      setStudyOptions((prev) => ({
-        ...prev,
-        studySelection: "classic",
-      }));
-    }
-
-    try {
-      await studyPreferences.setGamesEnabled(
-        enabled
-      );
-    } catch {
-      // Restore previous state if persistence fails.
-      setGamesEnabled(!enabled);
-
-      if (enabled === false) {
-        setStudyOptions((prev) => ({
-          ...prev,
-          studySelection: "games",
-        }));
-      }
-    }
-  };
 
   // ============================================================
   // LOAD CATEGORIES
@@ -282,9 +217,8 @@ export default function HomeScreen() {
           dueCount: 0,
           allCaughtUp: true,
 
-          studySelection: "classic",
-
-          gameType: "typing",
+          selectedCardSelection: null,
+          selectedGameType: "classic",
         });
 
         return;
@@ -297,10 +231,11 @@ export default function HomeScreen() {
         dueCount,
         allCaughtUp: false,
 
-        // Classic is always the default.
-        studySelection: "classic",
+        // First screen: user chooses New or Due.
+        selectedCardSelection: null,
 
-        gameType: "typing",
+        // Default study mode.
+        selectedGameType: "classic",
       });
     } catch (e) {
       setError(
@@ -321,7 +256,70 @@ export default function HomeScreen() {
     setStudyOptions((prev) => ({
       ...prev,
       visible: false,
+      selectedCardSelection: null,
+      selectedGameType: "classic",
     }));
+  };
+
+  // ============================================================
+  // SELECT NEW / DUE
+  // ============================================================
+
+  const selectCardSelection = (
+    selection: CardSelection
+  ) => {
+    setStudyOptions((prev) => ({
+      ...prev,
+      selectedCardSelection: selection,
+    }));
+  };
+
+  // ============================================================
+  // BACK TO NEW / DUE
+  // ============================================================
+
+  const backToCardSelection = () => {
+    setStudyOptions((prev) => ({
+      ...prev,
+      selectedCardSelection: null,
+    }));
+  };
+
+  // ============================================================
+  // SELECT STUDY MODE + NAVIGATE
+  // ============================================================
+
+  const selectStudyMode = (
+    gameType: GameType
+  ) => {
+    const category =
+      studyOptions.category;
+
+    const cardSelection =
+      studyOptions.selectedCardSelection;
+
+    if (!category || !cardSelection) {
+      return;
+    }
+
+    closeStudyModal();
+
+    router.push({
+      pathname: "/session",
+
+      params: {
+        categoryId: String(
+          category.id
+        ),
+
+        categoryName:
+          category.name,
+
+        mode: cardSelection,
+
+        gameType,
+      },
+    });
   };
 
   // ============================================================
@@ -343,7 +341,9 @@ export default function HomeScreen() {
   const [
     deleteError,
     setDeleteError,
-  ] = useState<string | null>(null);
+  ] = useState<string | null>(
+    null
+  );
 
   const openDeleteModal = (
     category: Category
@@ -391,75 +391,23 @@ export default function HomeScreen() {
     };
 
   // ============================================================
-  // SELECT CLASSIC / GAMES
+  // HELPERS
   // ============================================================
 
-  const selectClassic = () => {
-    setStudyOptions((prev) => ({
-      ...prev,
-      studySelection: "classic",
-    }));
-  };
+  const selectedCardCount =
+    studyOptions.selectedCardSelection ===
+    "new"
+      ? studyOptions.newCount
+      : studyOptions.selectedCardSelection ===
+        "due"
+        ? studyOptions.dueCount
+        : 0;
 
-  const selectGames = () => {
-    if (!gamesEnabled) return;
-
-    setStudyOptions((prev) => ({
-      ...prev,
-      studySelection: "games",
-    }));
-  };
-
-  // ============================================================
-  // SELECT GAME
-  // ============================================================
-
-  const selectGame = (
-    gameType: Exclude<GameType, "classic">
-  ) => {
-    setStudyOptions((prev) => ({
-      ...prev,
-      gameType,
-    }));
-  };
-
-  // ============================================================
-  // NAVIGATE TO SESSION
-  // ============================================================
-
-  const navigateToSession = (
-    mode: "new" | "due"
-  ) => {
-    const category =
-      studyOptions.category;
-
-    if (!category) return;
-
-    const gameType =
-      studyOptions.studySelection ===
-      "classic"
-        ? "classic"
-        : studyOptions.gameType;
-
-    closeStudyModal();
-
-    router.push({
-      pathname: "/session",
-
-      params: {
-        categoryId: String(
-          category.id
-        ),
-
-        categoryName:
-          category.name,
-
-        mode,
-
-        gameType,
-      },
-    });
-  };
+  const selectedCardLabel =
+    studyOptions.selectedCardSelection ===
+    "new"
+      ? "new"
+      : "due";
 
   return (
     <View
@@ -533,7 +481,8 @@ export default function HomeScreen() {
                 style={[
                   shared.rowText,
                   {
-                    fontWeight: "600",
+                    fontWeight:
+                      "600",
                     fontSize: 16,
                     marginBottom: 4,
                   },
@@ -696,7 +645,9 @@ export default function HomeScreen() {
         animationType="fade"
         transparent
         onRequestClose={
-          closeStudyModal
+          studyOptions.selectedCardSelection
+            ? backToCardSelection
+            : closeStudyModal
         }
       >
         <View
@@ -721,10 +672,12 @@ export default function HomeScreen() {
               padding: 24,
             }}
           >
+            {/* =================================================
+                ALL CAUGHT UP
+            ================================================= */}
+
             {studyOptions.allCaughtUp ? (
               <>
-                {/* EMPTY STATE */}
-
                 <View
                   style={{
                     alignItems:
@@ -829,9 +782,12 @@ export default function HomeScreen() {
                   </Text>
                 </TouchableOpacity>
               </>
-            ) : (
+            ) : studyOptions.selectedCardSelection ===
+              null ? (
               <>
-                {/* TITLE */}
+                {/* =================================================
+                    STEP 1 — CHOOSE NEW / DUE
+                ================================================= */}
 
                 <Text
                   style={[
@@ -843,7 +799,7 @@ export default function HomeScreen() {
                     },
                   ]}
                 >
-                  Choose how to study
+                  Choose what to study
                 </Text>
 
                 <Text
@@ -864,421 +820,6 @@ export default function HomeScreen() {
                   }
                 </Text>
 
-                {/* =================================================
-                    GAME ENABLE/DISABLE
-                ================================================= */}
-
-                <View
-                  style={{
-                    flexDirection:
-                      "row",
-                    alignItems:
-                      "center",
-                    justifyContent:
-                      "space-between",
-                    backgroundColor:
-                      colors.background,
-                    borderWidth: 1,
-                    borderColor:
-                      colors.border,
-                    borderRadius: 16,
-                    paddingHorizontal:
-                      16,
-                    paddingVertical:
-                      13,
-                    marginBottom:
-                      12,
-                  }}
-                >
-                  <View
-                    style={{
-                      flex: 1,
-                      paddingRight:
-                        16,
-                    }}
-                  >
-                    <Text
-                      style={[
-                        shared.rowText,
-                        {
-                          fontWeight:
-                            "700",
-                        },
-                      ]}
-                    >
-                      Game modes
-                    </Text>
-
-                    <Text
-                      style={[
-                        shared.hint,
-                        {
-                          marginTop: 2,
-                        },
-                      ]}
-                    >
-                      Optional practice activities
-                    </Text>
-                  </View>
-
-                  {!isLoadingGamesPreference && (
-                    <Switch
-                      value={
-                        gamesEnabled
-                      }
-                      onValueChange={
-                        toggleGamesEnabled
-                      }
-                      trackColor={{
-                        false:
-                          colors.border,
-                        true:
-                          colors.primary +
-                          "66",
-                      }}
-                      thumbColor={
-                        gamesEnabled
-                          ? colors.primary
-                          : colors.textMuted
-                      }
-                    />
-                  )}
-                </View>
-
-                {/* =================================================
-                    CLASSIC / GAMES SELECTOR
-                ================================================= */}
-
-                <View
-                  style={{
-                    flexDirection:
-                      "row",
-                    gap: 10,
-                    marginBottom:
-                      14,
-                  }}
-                >
-                  <TouchableOpacity
-                    style={{
-                      flex: 1,
-                      borderRadius:
-                        16,
-                      borderWidth: 1,
-                      borderColor:
-                        studyOptions.studySelection ===
-                        "classic"
-                          ? colors.primary
-                          : colors.border,
-                      backgroundColor:
-                        studyOptions.studySelection ===
-                        "classic"
-                          ? colors.primary +
-                            "12"
-                          : colors.background,
-                      paddingVertical:
-                        15,
-                      alignItems:
-                        "center",
-                    }}
-                    onPress={
-                      selectClassic
-                    }
-                  >
-                    <Feather
-                      name="layers"
-                      size={22}
-                      color={
-                        studyOptions.studySelection ===
-                        "classic"
-                          ? colors.primary
-                          : colors.textMuted
-                      }
-                    />
-
-                    <Text
-                      style={{
-                        color:
-                          studyOptions.studySelection ===
-                          "classic"
-                            ? colors.primary
-                            : colors.text,
-                        fontWeight:
-                          "800",
-                        marginTop:
-                          7,
-                      }}
-                    >
-                      Classic
-                    </Text>
-
-                    <Text
-                      style={[
-                        shared.hint,
-                        {
-                          marginTop:
-                            2,
-                        },
-                      ]}
-                    >
-                      Flashcards
-                    </Text>
-                  </TouchableOpacity>
-
-                  {gamesEnabled && (
-                    <TouchableOpacity
-                      style={{
-                        flex: 1,
-                        borderRadius:
-                          16,
-                        borderWidth: 1,
-                        borderColor:
-                          studyOptions.studySelection ===
-                          "games"
-                            ? colors.primary
-                            : colors.border,
-                        backgroundColor:
-                          studyOptions.studySelection ===
-                          "games"
-                            ? colors.primary +
-                              "12"
-                            : colors.background,
-                        paddingVertical:
-                          15,
-                        alignItems:
-                          "center",
-                      }}
-                      onPress={
-                        selectGames
-                      }
-                    >
-                      <Feather
-                        name="zap"
-                        size={22}
-                        color={
-                          studyOptions.studySelection ===
-                          "games"
-                            ? colors.primary
-                            : colors.textMuted
-                        }
-                      />
-
-                      <Text
-                        style={{
-                          color:
-                            studyOptions.studySelection ===
-                            "games"
-                              ? colors.primary
-                              : colors.text,
-                          fontWeight:
-                            "800",
-                          marginTop:
-                            7,
-                        }}
-                      >
-                        Games
-                      </Text>
-
-                      <Text
-                        style={[
-                          shared.hint,
-                          {
-                            marginTop:
-                              2,
-                          },
-                        ]}
-                      >
-                        Active practice
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                {/* =================================================
-                    GAME LIST
-                ================================================= */}
-
-                {studyOptions.studySelection ===
-                  "games" &&
-                  gamesEnabled && (
-                    <View
-                      style={{
-                        gap: 9,
-                        marginBottom:
-                          12,
-                      }}
-                    >
-                      {GAME_OPTIONS.map(
-                        ({
-                          type,
-                          title,
-                          description,
-                          icon,
-                        }) => {
-                          const selected =
-                            studyOptions.gameType ===
-                            type;
-
-                          return (
-                            <TouchableOpacity
-                              key={type}
-                              onPress={() =>
-                                selectGame(
-                                  type
-                                )
-                              }
-                              style={{
-                                flexDirection:
-                                  "row",
-                                alignItems:
-                                  "center",
-                                borderRadius:
-                                  15,
-                                borderWidth:
-                                  1,
-                                borderColor:
-                                  selected
-                                    ? colors.primary
-                                    : colors.border,
-                                backgroundColor:
-                                  selected
-                                    ? colors.primary +
-                                      "10"
-                                    : colors.background,
-                                padding:
-                                  13,
-                              }}
-                            >
-                              <View
-                                style={{
-                                  width: 42,
-                                  height: 42,
-                                  borderRadius:
-                                    12,
-                                  backgroundColor:
-                                    selected
-                                      ? colors.primary +
-                                        "1A"
-                                      : colors.surface,
-                                  alignItems:
-                                    "center",
-                                  justifyContent:
-                                    "center",
-                                  marginRight:
-                                    12,
-                                }}
-                              >
-                                <Feather
-                                  name={
-                                    icon
-                                  }
-                                  size={
-                                    20
-                                  }
-                                  color={
-                                    selected
-                                      ? colors.primary
-                                      : colors.textMuted
-                                  }
-                                />
-                              </View>
-
-                              <View
-                                style={{
-                                  flex: 1,
-                                }}
-                              >
-                                <Text
-                                  style={{
-                                    color:
-                                      colors.text,
-                                    fontSize:
-                                      15,
-                                    fontWeight:
-                                      "800",
-                                  }}
-                                >
-                                  {title}
-                                </Text>
-
-                                <Text
-                                  style={[
-                                    shared.hint,
-                                    {
-                                      marginTop:
-                                        2,
-                                    },
-                                  ]}
-                                >
-                                  {
-                                    description
-                                  }
-                                </Text>
-                              </View>
-
-                              <View
-                                style={{
-                                  width:
-                                    22,
-                                  height:
-                                    22,
-                                  borderRadius:
-                                    11,
-                                  borderWidth:
-                                    2,
-                                  borderColor:
-                                    selected
-                                      ? colors.primary
-                                      : colors.border,
-                                  alignItems:
-                                    "center",
-                                  justifyContent:
-                                    "center",
-                                }}
-                              >
-                                {selected && (
-                                  <View
-                                    style={{
-                                      width:
-                                        10,
-                                      height:
-                                        10,
-                                      borderRadius:
-                                        5,
-                                      backgroundColor:
-                                        colors.primary,
-                                    }}
-                                  />
-                                )}
-                              </View>
-                            </TouchableOpacity>
-                          );
-                        }
-                      )}
-                    </View>
-                  )}
-
-                {/* =================================================
-                    NEW / DUE
-                ================================================= */}
-
-                {studyOptions.studySelection ===
-                  "games" &&
-                  gamesEnabled && (
-                    <Text
-                      style={[
-                        shared.hint,
-                        {
-                          marginBottom:
-                            8,
-                          textAlign:
-                            "center",
-                        },
-                      ]}
-                    >
-                      Choose which cards to practice
-                    </Text>
-                  )}
-
                 {studyOptions.newCount >
                   0 && (
                   <TouchableOpacity
@@ -1298,7 +839,7 @@ export default function HomeScreen() {
                       },
                     ]}
                     onPress={() =>
-                      navigateToSession(
+                      selectCardSelection(
                         "new"
                       )
                     }
@@ -1384,7 +925,7 @@ export default function HomeScreen() {
                       },
                     ]}
                     onPress={() =>
-                      navigateToSession(
+                      selectCardSelection(
                         "due"
                       )
                     }
@@ -1453,16 +994,308 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 )}
 
-                {/* =================================================
-                    CANCEL
-                ================================================= */}
-
                 <TouchableOpacity
                   style={{
                     padding: 14,
                     alignItems:
                       "center",
                     marginTop: 4,
+                  }}
+                  onPress={
+                    closeStudyModal
+                  }
+                >
+                  <Text
+                    style={{
+                      color:
+                        colors.textMuted,
+                      fontWeight:
+                        "600",
+                      fontSize: 16,
+                    }}
+                  >
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                {/* =================================================
+                    STEP 2 — CHOOSE STUDY MODE
+                ================================================= */}
+
+                <View
+                  style={{
+                    flexDirection:
+                      "row",
+                    alignItems:
+                      "center",
+                    marginBottom:
+                      14,
+                  }}
+                >
+                  <TouchableOpacity
+                    onPress={
+                      backToCardSelection
+                    }
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      backgroundColor:
+                        colors.background,
+                      alignItems:
+                        "center",
+                      justifyContent:
+                        "center",
+                    }}
+                  >
+                    <Feather
+                      name="arrow-left"
+                      size={21}
+                      color={
+                        colors.text
+                      }
+                    />
+                  </TouchableOpacity>
+
+                  <View
+                    style={{
+                      flex: 1,
+                      alignItems:
+                        "center",
+                      paddingRight:
+                        40,
+                    }}
+                  >
+                    <Text
+                      style={[
+                        shared.title,
+                        {
+                          fontSize: 21,
+                          textAlign:
+                            "center",
+                        },
+                      ]}
+                    >
+                      How do you want to study?
+                    </Text>
+
+                    <Text
+                      style={[
+                        shared.subtitle,
+                        {
+                          textAlign:
+                            "center",
+                          marginTop: 3,
+                        },
+                      ]}
+                    >
+                      {selectedCardCount}{" "}
+                      {selectedCardLabel}{" "}
+                      {selectedCardCount ===
+                      1
+                        ? "word"
+                        : "words"}
+                    </Text>
+                  </View>
+                </View>
+
+                <View
+                  style={{
+                    gap: 9,
+                    marginBottom:
+                      12,
+                  }}
+                >
+                  {STUDY_MODE_OPTIONS.map(
+                    ({
+                      type,
+                      title,
+                      description,
+                      icon,
+                    }) => {
+                      const selected =
+                        studyOptions.selectedGameType ===
+                        type;
+
+                      return (
+                        <TouchableOpacity
+                          key={type}
+                          onPress={() =>
+                            setStudyOptions(
+                              (prev) => ({
+                                ...prev,
+                                selectedGameType:
+                                  type,
+                              })
+                            )
+                          }
+                          style={{
+                            flexDirection:
+                              "row",
+                            alignItems:
+                              "center",
+                            borderRadius:
+                              15,
+                            borderWidth:
+                              1,
+                            borderColor:
+                              selected
+                                ? colors.primary
+                                : colors.border,
+                            backgroundColor:
+                              selected
+                                ? colors.primary +
+                                  "10"
+                                : colors.background,
+                            padding:
+                              13,
+                          }}
+                        >
+                          <View
+                            style={{
+                              width: 42,
+                              height: 42,
+                              borderRadius:
+                                12,
+                              backgroundColor:
+                                selected
+                                  ? colors.primary +
+                                    "1A"
+                                  : colors.surface,
+                              alignItems:
+                                "center",
+                              justifyContent:
+                                "center",
+                              marginRight:
+                                12,
+                            }}
+                          >
+                            <Feather
+                              name={
+                                icon
+                              }
+                              size={20}
+                              color={
+                                selected
+                                  ? colors.primary
+                                  : colors.textMuted
+                              }
+                            />
+                          </View>
+
+                          <View
+                            style={{
+                              flex: 1,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                color:
+                                  colors.text,
+                                fontSize:
+                                  15,
+                                fontWeight:
+                                  "800",
+                              }}
+                            >
+                              {title}
+                            </Text>
+
+                            <Text
+                              style={[
+                                shared.hint,
+                                {
+                                  marginTop:
+                                    2,
+                                },
+                              ]}
+                            >
+                              {
+                                description
+                              }
+                            </Text>
+                          </View>
+
+                          <View
+                            style={{
+                              width: 22,
+                              height: 22,
+                              borderRadius:
+                                11,
+                              borderWidth:
+                                2,
+                              borderColor:
+                                selected
+                                  ? colors.primary
+                                  : colors.border,
+                              alignItems:
+                                "center",
+                              justifyContent:
+                                "center",
+                            }}
+                          >
+                            {selected && (
+                              <View
+                                style={{
+                                  width:
+                                    10,
+                                  height:
+                                    10,
+                                  borderRadius:
+                                    5,
+                                  backgroundColor:
+                                    colors.primary,
+                                }}
+                              />
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    }
+                  )}
+                </View>
+
+                {/* =================================================
+                    START BUTTON
+                ================================================= */}
+
+                <TouchableOpacity
+                  style={{
+                    backgroundColor:
+                      colors.primary,
+                    borderRadius:
+                      16,
+                    paddingVertical:
+                      15,
+                    alignItems:
+                      "center",
+                    marginTop: 4,
+                  }}
+                  onPress={() =>
+                    selectStudyMode(
+                      studyOptions.selectedGameType
+                    )
+                  }
+                >
+                  <Text
+                    style={{
+                      color: "#fff",
+                      fontWeight:
+                        "800",
+                      fontSize: 16,
+                    }}
+                  >
+                    Start
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{
+                    padding: 14,
+                    alignItems:
+                      "center",
                   }}
                   onPress={
                     closeStudyModal

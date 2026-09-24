@@ -27,7 +27,6 @@ import * as flashcardService from "../services/flashcards";
 import { ApiClientError } from "../services/api";
 
 import StudyCard from "../components/StudyCard";
-
 import TypingGame from "../components/TypingGame";
 import SentenceGame from "../components/SentenceGame";
 import TranslationGame from "../components/TranslationGame";
@@ -96,22 +95,31 @@ export default function SessionScreen() {
     useLocalSearchParams<{
       categoryId?: string;
       languagePairId?: string;
-      mode: SessionMode;
+      mode?: SessionMode;
       categoryName?: string;
-      gameType?: GameType;
+      gameType?: string;
     }>();
 
   const { colors } = useTheme();
   const shared = useSharedStyles();
   const router = useRouter();
 
-  const catId = categoryId
-    ? Number(categoryId)
-    : null;
+  const catId =
+    categoryId !== undefined
+      ? Number(categoryId)
+      : null;
 
-  const pairId = languagePairId
-    ? Number(languagePairId)
-    : null;
+  const pairId =
+    languagePairId !== undefined
+      ? Number(languagePairId)
+      : null;
+
+  const sessionMode: SessionMode =
+    mode === "new" ||
+    mode === "due" ||
+    mode === "difficult"
+      ? mode
+      : "new";
 
   const gameType = getGameType(
     rawGameType
@@ -133,10 +141,14 @@ export default function SessionScreen() {
     useState(false);
 
   const isDifficultMode =
-    mode === "difficult";
+    sessionMode === "difficult";
 
   const gameLabel =
     getGameLabel(gameType);
+
+  // ============================================================
+  // LOAD SESSION
+  // ============================================================
 
   const load = useCallback(
     async () => {
@@ -149,9 +161,13 @@ export default function SessionScreen() {
       try {
         let studyQueue: Flashcard[];
 
+        // --------------------------------------------------------
+        // DIFFICULT MODE
+        // --------------------------------------------------------
+
         if (isDifficultMode) {
           if (
-            !pairId ||
+            pairId === null ||
             Number.isNaN(pairId)
           ) {
             throw new Error(
@@ -160,14 +176,19 @@ export default function SessionScreen() {
           }
 
           studyQueue =
-            await flashcardService
-              .getDifficultStudyQueue(
-                pairId,
-                20
-              );
-        } else {
+            await flashcardService.getDifficultStudyQueue(
+              pairId,
+              20
+            );
+        }
+
+        // --------------------------------------------------------
+        // NEW / DUE MODE
+        // --------------------------------------------------------
+
+        else {
           if (
-            !catId ||
+            catId === null ||
             Number.isNaN(catId)
           ) {
             throw new Error(
@@ -176,11 +197,10 @@ export default function SessionScreen() {
           }
 
           studyQueue =
-            await flashcardService
-              .getStudyQueue(
-                catId,
-                mode
-              );
+            await flashcardService.getStudyQueue(
+              catId,
+              sessionMode
+            );
         }
 
         setQueue(studyQueue);
@@ -197,7 +217,7 @@ export default function SessionScreen() {
     [
       catId,
       pairId,
-      mode,
+      sessionMode,
       isDifficultMode,
     ]
   );
@@ -205,6 +225,10 @@ export default function SessionScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // ============================================================
+  // REVIEW
+  // ============================================================
 
   const handleReview = async (
     result: ReviewResult
@@ -223,11 +247,10 @@ export default function SessionScreen() {
     setError(null);
 
     try {
-      await flashcardService
-        .reviewFlashcard(
-          current.id,
-          result
-        );
+      await flashcardService.reviewFlashcard(
+        current.id,
+        result
+      );
 
       setReviewedCount(
         (count) => count + 1
@@ -241,7 +264,9 @@ export default function SessionScreen() {
       setError(
         e instanceof ApiClientError
           ? e.detail
-          : "Failed to submit review."
+          : e instanceof Error
+            ? e.message
+            : "Failed to submit review."
       );
     } finally {
       setIsReviewing(false);
@@ -421,7 +446,9 @@ export default function SessionScreen() {
         },
       ]}
     >
-      {/* HEADER */}
+      {/* ======================================================
+          HEADER
+      ====================================================== */}
 
       <View
         style={{
@@ -458,6 +485,8 @@ export default function SessionScreen() {
             marginHorizontal: 12,
           }}
         >
+          {/* GAME TYPE */}
+
           {gameLabel && (
             <Text
               style={{
@@ -476,6 +505,8 @@ export default function SessionScreen() {
             </Text>
           )}
 
+          {/* CATEGORY / DIFFICULT */}
+
           {sessionTitle && (
             <Text
               style={{
@@ -493,6 +524,8 @@ export default function SessionScreen() {
               {sessionTitle}
             </Text>
           )}
+
+          {/* PROGRESS */}
 
           <Text
             style={{
@@ -514,12 +547,18 @@ export default function SessionScreen() {
           </Text>
         </View>
 
+        {/* BALANCE HEADER */}
+
         <View
-          style={{ width: 28 }}
+          style={{
+            width: 28,
+          }}
         />
       </View>
 
-      {/* CONTENT */}
+      {/* ======================================================
+          CONTENT
+      ====================================================== */}
 
       {gameType === "classic" && (
         <StudyCard
