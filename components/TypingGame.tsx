@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   View,
   Text,
@@ -76,6 +76,7 @@ export default function TypingGame({
   const [error, setError] = useState<string | null>(
     null
   );
+  const [gaveUp, setGaveUp] = useState(false);
 
   const learningLanguage =
     activePair?.learning_language?.toUpperCase() ??
@@ -104,6 +105,33 @@ export default function TypingGame({
         e instanceof ApiClientError
           ? e.detail
           : "Failed to check your answer."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const revealAnswer = async () => {
+    if (isSubmitting || result !== null) {
+      return;
+    }
+
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      // Logs a real GameAttempt (is_correct: false, gave_up: true)
+      // through its own endpoint, rather than faking an answer
+      // through evaluateTyping.
+      await gameService.giveUpTyping(card.id);
+
+      setGaveUp(true);
+      setResult(false);
+    } catch (e) {
+      setError(
+        e instanceof ApiClientError
+          ? e.detail
+          : "Failed to record your answer."
       );
     } finally {
       setIsSubmitting(false);
@@ -245,7 +273,7 @@ export default function TypingGame({
           {/* INPUT */}
 
           {result === null && (
-            <View style={{ gap: 12 }}>
+            <View style={{ gap: 10 }}>
               <TextInput
                 value={answer}
                 onChangeText={setAnswer}
@@ -306,6 +334,28 @@ export default function TypingGame({
                   </Text>
                 )}
               </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={revealAnswer}
+                disabled={isSubmitting}
+                style={{
+                  paddingVertical: 8,
+                  alignItems: "center",
+                  opacity: isSubmitting ? 0.5 : 1,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 13,
+                    fontWeight: "600",
+                    textDecorationLine:
+                      "underline",
+                  }}
+                >
+                  Don't know? Show answer
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -359,6 +409,8 @@ export default function TypingGame({
                   name={
                     result
                       ? "check-circle"
+                      : gaveUp
+                      ? "eye"
                       : "x-circle"
                   }
                   size={44}
@@ -375,6 +427,8 @@ export default function TypingGame({
                 >
                   {result
                     ? "Correct!"
+                    : gaveUp
+                    ? "Here's the answer"
                     : "Not quite"}
                 </Text>
               </View>

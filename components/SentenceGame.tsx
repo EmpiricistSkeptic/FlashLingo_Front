@@ -83,12 +83,20 @@ export default function SentenceGame({
   const [error, setError] =
     useState<string | null>(null);
 
+  const [gaveUp, setGaveUp] =
+    useState(false);
+
+  // ============================================================
+  // GENERATE CHALLENGE
+  // ============================================================
+
   const generateChallenge = async () => {
     setError(null);
     setResult(null);
     setAnswer("");
     setContext("");
     setInstruction("");
+    setGaveUp(false);
     setIsGenerating(true);
 
     try {
@@ -105,7 +113,9 @@ export default function SentenceGame({
       setError(
         e instanceof ApiClientError
           ? e.detail
-          : "Failed to generate the challenge."
+          : e instanceof Error
+            ? e.message
+            : "Failed to generate the challenge."
       );
     } finally {
       setIsGenerating(false);
@@ -115,6 +125,10 @@ export default function SentenceGame({
   useEffect(() => {
     generateChallenge();
   }, [card.id]);
+
+  // ============================================================
+  // SUBMIT ANSWER
+  // ============================================================
 
   const submit = async () => {
     const trimmed = answer.trim();
@@ -144,12 +158,58 @@ export default function SentenceGame({
       setError(
         e instanceof ApiClientError
           ? e.detail
-          : "Failed to evaluate your sentence."
+          : e instanceof Error
+            ? e.message
+            : "Failed to evaluate your sentence."
       );
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // ============================================================
+  // REVEAL EXAMPLE
+  // ============================================================
+
+  const revealAnswer = async () => {
+    if (
+      isSubmitting ||
+      result !== null ||
+      !context
+    ) {
+      return;
+    }
+
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      // Logs a real failed GameAttempt and asks the AI
+      // for an example sentence.
+      const response =
+        await gameService.giveUpSentence(
+          card.id,
+          context
+        );
+
+      setGaveUp(true);
+      setResult(response);
+    } catch (e) {
+      setError(
+        e instanceof ApiClientError
+          ? e.detail
+          : e instanceof Error
+            ? e.message
+            : "Failed to get an example."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // ============================================================
+  // GENERATION LOADING
+  // ============================================================
 
   if (isGenerating) {
     return (
@@ -190,6 +250,10 @@ export default function SentenceGame({
       </View>
     );
   }
+
+  // ============================================================
+  // GENERATION ERROR
+  // ============================================================
 
   if (error && !context) {
     return (
@@ -256,10 +320,10 @@ export default function SentenceGame({
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={
-        Platform.OS === "ios" ? "padding" : "height"
+        Platform.OS === "ios"
+          ? "padding"
+          : "height"
       }
-      // On iOS this offsets for any header/nav bar sitting above this
-      // screen. Tune this if the screen has a custom header height.
       keyboardVerticalOffset={
         Platform.OS === "ios" ? 90 : 0
       }
@@ -278,7 +342,9 @@ export default function SentenceGame({
             gap: 18,
           }}
         >
-          {/* HEADER */}
+          {/* ====================================================
+              HEADER
+          ==================================================== */}
 
           <View
             style={{
@@ -305,7 +371,11 @@ export default function SentenceGame({
               />
             </View>
 
-            <View style={{ flex: 1 }}>
+            <View
+              style={{
+                flex: 1,
+              }}
+            >
               <Text
                 style={{
                   color: colors.text,
@@ -329,7 +399,9 @@ export default function SentenceGame({
             </View>
           </View>
 
-          {/* TARGET WORD */}
+          {/* ====================================================
+              TARGET WORD
+          ==================================================== */}
 
           <View
             style={{
@@ -368,7 +440,9 @@ export default function SentenceGame({
             </Text>
           </View>
 
-          {/* AI CONTEXT */}
+          {/* ====================================================
+              AI CONTEXT
+          ==================================================== */}
 
           <View
             style={{
@@ -405,7 +479,9 @@ export default function SentenceGame({
             </Text>
           </View>
 
-          {/* INSTRUCTION */}
+          {/* ====================================================
+              INSTRUCTION
+          ==================================================== */}
 
           <View
             style={{
@@ -418,7 +494,9 @@ export default function SentenceGame({
               name="info"
               size={18}
               color={colors.primary}
-              style={{ marginTop: 2 }}
+              style={{
+                marginTop: 2,
+              }}
             />
 
             <Text
@@ -432,10 +510,16 @@ export default function SentenceGame({
             </Text>
           </View>
 
-          {/* INPUT */}
+          {/* ====================================================
+              INPUT
+          ==================================================== */}
 
           {result === null && (
-            <View style={{ gap: 12 }}>
+            <View
+              style={{
+                gap: 10,
+              }}
+            >
               <TextInput
                 value={answer}
                 onChangeText={setAnswer}
@@ -495,10 +579,35 @@ export default function SentenceGame({
                   </Text>
                 )}
               </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={revealAnswer}
+                disabled={isSubmitting}
+                style={{
+                  paddingVertical: 8,
+                  alignItems: "center",
+                  opacity:
+                    isSubmitting ? 0.5 : 1,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 13,
+                    fontWeight: "600",
+                    textDecorationLine:
+                      "underline",
+                  }}
+                >
+                  Don't know? Show an example
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
 
-          {/* REQUEST ERROR */}
+          {/* ====================================================
+              REQUEST ERROR
+          ==================================================== */}
 
           {error && context && (
             <View
@@ -520,7 +629,9 @@ export default function SentenceGame({
             </View>
           )}
 
-          {/* RESULT */}
+          {/* ====================================================
+              RESULT
+          ==================================================== */}
 
           {result && (
             <View
@@ -539,6 +650,8 @@ export default function SentenceGame({
                 gap: 14,
               }}
             >
+              {/* RESULT HEADER */}
+
               <View
                 style={{
                   alignItems: "center",
@@ -548,7 +661,9 @@ export default function SentenceGame({
                   name={
                     result.is_correct
                       ? "check-circle"
-                      : "x-circle"
+                      : gaveUp
+                        ? "eye"
+                        : "x-circle"
                   }
                   size={44}
                   color={
@@ -571,9 +686,47 @@ export default function SentenceGame({
                 >
                   {result.is_correct
                     ? "Correct!"
-                    : "Needs improvement"}
+                    : gaveUp
+                      ? "Here's an example"
+                      : "Needs improvement"}
                 </Text>
               </View>
+
+              {/* SCORE */}
+
+              {!gaveUp && (
+                <View
+                  style={{
+                    alignItems: "center",
+                  }}
+                >
+                  <Text
+                    style={[
+                      shared.hint,
+                      {
+                        marginBottom: 4,
+                      },
+                    ]}
+                  >
+                    AI score
+                  </Text>
+
+                  <Text
+                    style={{
+                      color: colors.primary,
+                      fontSize: 32,
+                      fontWeight: "900",
+                    }}
+                  >
+                    {Math.round(
+                      result.score * 100
+                    )}
+                    %
+                  </Text>
+                </View>
+              )}
+
+              {/* FEEDBACK */}
 
               <View
                 style={{
@@ -585,8 +738,7 @@ export default function SentenceGame({
               >
                 <Text
                   style={{
-                    color:
-                      colors.textMuted,
+                    color: colors.textMuted,
                     fontSize: 12,
                     fontWeight: "700",
                     textTransform:
@@ -608,35 +760,47 @@ export default function SentenceGame({
                 </Text>
               </View>
 
+              {/* =================================================
+                  TEACHER EXPLANATION
+              ================================================= */}
+
               <View
                 style={{
-                  alignItems: "center",
+                  backgroundColor:
+                    colors.background,
+                  borderRadius: 14,
+                  padding: 15,
                 }}
               >
                 <Text
-                  style={[
-                    shared.hint,
-                    {
-                      marginBottom: 4,
-                    },
-                  ]}
+                  style={{
+                    color: colors.textMuted,
+                    fontSize: 12,
+                    fontWeight: "700",
+                    textTransform:
+                      "uppercase",
+                    marginBottom: 6,
+                  }}
                 >
-                  AI score
+                  {gaveUp
+                    ? "Why this works"
+                    : "Why this score?"}
                 </Text>
 
                 <Text
                   style={{
-                    color: colors.primary,
-                    fontSize: 28,
-                    fontWeight: "900",
+                    color: colors.text,
+                    fontSize: 14,
+                    lineHeight: 21,
                   }}
                 >
-                  {Math.round(
-                    result.score * 100
-                  )}
-                  %
+                  {result.explanation}
                 </Text>
               </View>
+
+              {/* =================================================
+                  CORRECTION / EXAMPLE
+              ================================================= */}
 
               {result.correction && (
                 <View
@@ -649,8 +813,7 @@ export default function SentenceGame({
                 >
                   <Text
                     style={{
-                      color:
-                        colors.textMuted,
+                      color: colors.textMuted,
                       fontSize: 12,
                       fontWeight: "700",
                       textTransform:
@@ -658,13 +821,14 @@ export default function SentenceGame({
                       marginBottom: 6,
                     }}
                   >
-                    Suggested correction
+                    {gaveUp
+                      ? "Example sentence"
+                      : "Suggested correction"}
                   </Text>
 
                   <Text
                     style={{
-                      color:
-                        colors.text,
+                      color: colors.text,
                       fontSize: 16,
                       lineHeight: 24,
                     }}
@@ -676,10 +840,16 @@ export default function SentenceGame({
             </View>
           )}
 
-          {/* REVIEW */}
+          {/* ====================================================
+              REVIEW
+          ==================================================== */}
 
           {result && (
-            <View style={{ gap: 10 }}>
+            <View
+              style={{
+                gap: 10,
+              }}
+            >
               <Text
                 style={{
                   color: colors.textMuted,
@@ -748,3 +918,5 @@ export default function SentenceGame({
     </KeyboardAvoidingView>
   );
 }
+
+

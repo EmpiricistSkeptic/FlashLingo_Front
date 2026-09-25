@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+
 import {
   View,
   Text,
@@ -9,6 +10,7 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
+
 import { Feather } from "@expo/vector-icons";
 
 import { useTheme } from "../contexts/ThemeContext";
@@ -32,7 +34,11 @@ interface Props {
 const REVIEW_BUTTONS: {
   result: ReviewResult;
   label: string;
-  colorKey: "danger" | "warning" | "primary" | "success";
+  colorKey:
+    | "danger"
+    | "warning"
+    | "primary"
+    | "success";
 }[] = [
   {
     result: "again",
@@ -71,7 +77,8 @@ export default function TranslationGame({
   const [instruction, setInstruction] =
     useState("");
 
-  const [answer, setAnswer] = useState("");
+  const [answer, setAnswer] =
+    useState("");
 
   const [isGenerating, setIsGenerating] =
     useState(true);
@@ -87,9 +94,16 @@ export default function TranslationGame({
   const [error, setError] =
     useState<string | null>(null);
 
+  const [gaveUp, setGaveUp] =
+    useState(false);
+
   const learningLanguage =
     activePair?.learning_language?.toUpperCase() ??
     "TARGET LANGUAGE";
+
+  // ============================================================
+  // GENERATE CHALLENGE
+  // ============================================================
 
   const generateChallenge = async () => {
     setError(null);
@@ -97,6 +111,7 @@ export default function TranslationGame({
     setAnswer("");
     setSourceSentence("");
     setInstruction("");
+    setGaveUp(false);
     setIsGenerating(true);
 
     try {
@@ -116,7 +131,9 @@ export default function TranslationGame({
       setError(
         e instanceof ApiClientError
           ? e.detail
-          : "Failed to generate the challenge."
+          : e instanceof Error
+            ? e.message
+            : "Failed to generate the challenge."
       );
     } finally {
       setIsGenerating(false);
@@ -127,8 +144,13 @@ export default function TranslationGame({
     generateChallenge();
   }, [card.id]);
 
+  // ============================================================
+  // SUBMIT ANSWER
+  // ============================================================
+
   const submit = async () => {
-    const trimmed = answer.trim();
+    const trimmed =
+      answer.trim();
 
     if (
       !trimmed ||
@@ -155,12 +177,58 @@ export default function TranslationGame({
       setError(
         e instanceof ApiClientError
           ? e.detail
-          : "Failed to evaluate your translation."
+          : e instanceof Error
+            ? e.message
+            : "Failed to evaluate your translation."
       );
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // ============================================================
+  // REVEAL EXAMPLE
+  // ============================================================
+
+  const revealAnswer = async () => {
+    if (
+      isSubmitting ||
+      result !== null ||
+      !sourceSentence
+    ) {
+      return;
+    }
+
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      // Logs a real failed GameAttempt and asks the AI
+      // for an example translation.
+      const response =
+        await gameService.giveUpTranslation(
+          card.id,
+          sourceSentence
+        );
+
+      setGaveUp(true);
+      setResult(response);
+    } catch (e) {
+      setError(
+        e instanceof ApiClientError
+          ? e.detail
+          : e instanceof Error
+            ? e.message
+            : "Failed to get an example."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // ============================================================
+  // GENERATION LOADING
+  // ============================================================
 
   if (isGenerating) {
     return (
@@ -204,7 +272,14 @@ export default function TranslationGame({
     );
   }
 
-  if (error && !sourceSentence) {
+  // ============================================================
+  // GENERATION ERROR
+  // ============================================================
+
+  if (
+    error &&
+    !sourceSentence
+  ) {
     return (
       <View
         style={{
@@ -267,12 +342,14 @@ export default function TranslationGame({
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={{
+        flex: 1,
+      }}
       behavior={
-        Platform.OS === "ios" ? "padding" : "height"
+        Platform.OS === "ios"
+          ? "padding"
+          : "height"
       }
-      // On iOS this offsets for any header/nav bar sitting above this
-      // screen. Tune this if the screen has a custom header height.
       keyboardVerticalOffset={
         Platform.OS === "ios" ? 90 : 0
       }
@@ -291,7 +368,9 @@ export default function TranslationGame({
             gap: 18,
           }}
         >
-          {/* HEADER */}
+          {/* ====================================================
+              HEADER
+          ==================================================== */}
 
           <View
             style={{
@@ -318,7 +397,11 @@ export default function TranslationGame({
               />
             </View>
 
-            <View style={{ flex: 1 }}>
+            <View
+              style={{
+                flex: 1,
+              }}
+            >
               <Text
                 style={{
                   color: colors.text,
@@ -343,46 +426,9 @@ export default function TranslationGame({
             </View>
           </View>
 
-          {/* TARGET WORD */}
-
-          <View
-            style={{
-              backgroundColor:
-                colors.primary + "10",
-              borderWidth: 1,
-              borderColor:
-                colors.primary + "35",
-              borderRadius: 18,
-              padding: 18,
-              alignItems: "center",
-            }}
-          >
-            <Text
-              style={{
-                color: colors.textMuted,
-                fontSize: 11,
-                fontWeight: "800",
-                textTransform: "uppercase",
-                letterSpacing: 1.2,
-                marginBottom: 8,
-              }}
-            >
-              Target word
-            </Text>
-
-            <Text
-              style={{
-                color: colors.primary,
-                fontSize: 30,
-                fontWeight: "900",
-                textAlign: "center",
-              }}
-            >
-              {card.text}
-            </Text>
-          </View>
-
-          {/* SOURCE SENTENCE */}
+          {/* ====================================================
+              SOURCE SENTENCE
+          ==================================================== */}
 
           <View
             style={{
@@ -420,7 +466,9 @@ export default function TranslationGame({
             </Text>
           </View>
 
-          {/* INSTRUCTION */}
+          {/* ====================================================
+              INSTRUCTION
+          ==================================================== */}
 
           <View
             style={{
@@ -433,7 +481,9 @@ export default function TranslationGame({
               name="info"
               size={18}
               color={colors.primary}
-              style={{ marginTop: 2 }}
+              style={{
+                marginTop: 2,
+              }}
             />
 
             <Text
@@ -447,10 +497,16 @@ export default function TranslationGame({
             </Text>
           </View>
 
-          {/* INPUT */}
+          {/* ====================================================
+              INPUT
+          ==================================================== */}
 
           {result === null && (
-            <View style={{ gap: 12 }}>
+            <View
+              style={{
+                gap: 10,
+              }}
+            >
               <TextInput
                 value={answer}
                 onChangeText={setAnswer}
@@ -510,32 +566,67 @@ export default function TranslationGame({
                   </Text>
                 )}
               </TouchableOpacity>
-            </View>
-          )}
 
-          {/* ERROR */}
-
-          {error && sourceSentence && (
-            <View
-              style={{
-                backgroundColor:
-                  colors.danger + "12",
-                borderRadius: 14,
-                padding: 14,
-              }}
-            >
-              <Text
+              <TouchableOpacity
+                onPress={revealAnswer}
+                disabled={
+                  isSubmitting
+                }
                 style={{
-                  color: colors.danger,
-                  textAlign: "center",
+                  paddingVertical: 8,
+                  alignItems: "center",
+                  opacity:
+                    isSubmitting
+                      ? 0.5
+                      : 1,
                 }}
               >
-                {error}
-              </Text>
+                <Text
+                  style={{
+                    color:
+                      colors.textMuted,
+                    fontSize: 13,
+                    fontWeight: "600",
+                    textDecorationLine:
+                      "underline",
+                  }}
+                >
+                  Don't know? Show an example
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
 
-          {/* RESULT */}
+          {/* ====================================================
+              REQUEST ERROR
+          ==================================================== */}
+
+          {error &&
+            sourceSentence && (
+              <View
+                style={{
+                  backgroundColor:
+                    colors.danger + "12",
+                  borderRadius: 14,
+                  padding: 14,
+                }}
+              >
+                <Text
+                  style={{
+                    color:
+                      colors.danger,
+                    textAlign:
+                      "center",
+                  }}
+                >
+                  {error}
+                </Text>
+              </View>
+            )}
+
+          {/* ====================================================
+              RESULT
+          ==================================================== */}
 
           {result && (
             <View
@@ -554,16 +645,21 @@ export default function TranslationGame({
                 gap: 14,
               }}
             >
+              {/* RESULT HEADER */}
+
               <View
                 style={{
-                  alignItems: "center",
+                  alignItems:
+                    "center",
                 }}
               >
                 <Feather
                   name={
                     result.is_correct
                       ? "check-circle"
-                      : "x-circle"
+                      : gaveUp
+                        ? "eye"
+                        : "x-circle"
                   }
                   size={44}
                   color={
@@ -586,39 +682,49 @@ export default function TranslationGame({
                 >
                   {result.is_correct
                     ? "Correct!"
-                    : "Not quite"}
+                    : gaveUp
+                      ? "Here's an example"
+                      : "Not quite"}
                 </Text>
               </View>
 
-              <View
-                style={{
-                  alignItems: "center",
-                }}
-              >
-                <Text
-                  style={[
-                    shared.hint,
-                    {
-                      marginBottom: 4,
-                    },
-                  ]}
-                >
-                  AI score
-                </Text>
+              {/* SCORE */}
 
-                <Text
+              {!gaveUp && (
+                <View
                   style={{
-                    color: colors.primary,
-                    fontSize: 28,
-                    fontWeight: "900",
+                    alignItems:
+                      "center",
                   }}
                 >
-                  {Math.round(
-                    result.score * 100
-                  )}
-                  %
-                </Text>
-              </View>
+                  <Text
+                    style={[
+                      shared.hint,
+                      {
+                        marginBottom: 4,
+                      },
+                    ]}
+                  >
+                    AI score
+                  </Text>
+
+                  <Text
+                    style={{
+                      color:
+                        colors.primary,
+                      fontSize: 32,
+                      fontWeight: "900",
+                    }}
+                  >
+                    {Math.round(
+                      result.score * 100
+                    )}
+                    %
+                  </Text>
+                </View>
+              )}
+
+              {/* FEEDBACK */}
 
               <View
                 style={{
@@ -644,7 +750,8 @@ export default function TranslationGame({
 
                 <Text
                   style={{
-                    color: colors.text,
+                    color:
+                      colors.text,
                     fontSize: 16,
                     lineHeight: 24,
                   }}
@@ -652,6 +759,50 @@ export default function TranslationGame({
                   {result.feedback}
                 </Text>
               </View>
+
+              {/* =================================================
+                  TEACHER EXPLANATION
+              ================================================= */}
+
+              <View
+                style={{
+                  backgroundColor:
+                    colors.background,
+                  borderRadius: 14,
+                  padding: 15,
+                }}
+              >
+                <Text
+                  style={{
+                    color:
+                      colors.textMuted,
+                    fontSize: 12,
+                    fontWeight: "700",
+                    textTransform:
+                      "uppercase",
+                    marginBottom: 6,
+                  }}
+                >
+                  {gaveUp
+                    ? "Why this works"
+                    : "Why this score?"}
+                </Text>
+
+                <Text
+                  style={{
+                    color:
+                      colors.text,
+                    fontSize: 14,
+                    lineHeight: 21,
+                  }}
+                >
+                  {result.explanation}
+                </Text>
+              </View>
+
+              {/* =================================================
+                  CORRECTION / EXAMPLE
+              ================================================= */}
 
               {result.correction && (
                 <View
@@ -673,7 +824,9 @@ export default function TranslationGame({
                       marginBottom: 6,
                     }}
                   >
-                    Suggested correction
+                    {gaveUp
+                      ? "Example translation"
+                      : "Suggested correction"}
                   </Text>
 
                   <Text
@@ -691,16 +844,25 @@ export default function TranslationGame({
             </View>
           )}
 
-          {/* REVIEW */}
+          {/* ====================================================
+              REVIEW
+          ==================================================== */}
 
           {result && (
-            <View style={{ gap: 10 }}>
+            <View
+              style={{
+                gap: 10,
+              }}
+            >
               <Text
                 style={{
-                  color: colors.textMuted,
-                  textAlign: "center",
+                  color:
+                    colors.textMuted,
+                  textAlign:
+                    "center",
                   fontSize: 13,
-                  fontWeight: "600",
+                  fontWeight:
+                    "600",
                 }}
               >
                 How well did you know this word?
@@ -708,19 +870,25 @@ export default function TranslationGame({
 
               <View
                 style={{
-                  flexDirection: "row",
+                  flexDirection:
+                    "row",
                   gap: 10,
                 }}
               >
                 {REVIEW_BUTTONS.map(
                   ({
-                    result: reviewResult,
+                    result:
+                      reviewResult,
                     label,
                     colorKey,
                   }) => (
                     <TouchableOpacity
-                      key={reviewResult}
-                      disabled={isReviewing}
+                      key={
+                        reviewResult
+                      }
+                      disabled={
+                        isReviewing
+                      }
                       onPress={() =>
                         onReview(
                           reviewResult
@@ -736,8 +904,10 @@ export default function TranslationGame({
                           isReviewing
                             ? 0.5
                             : 1,
-                        borderRadius: 14,
-                        paddingVertical: 14,
+                        borderRadius:
+                          14,
+                        paddingVertical:
+                          14,
                         alignItems:
                           "center",
                       }}

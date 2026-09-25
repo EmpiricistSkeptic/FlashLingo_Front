@@ -32,6 +32,7 @@ export interface GameEvaluationResponse {
   is_correct: boolean;
   score: number;
   feedback: string;
+  explanation: string;
   correction: string | null;
 }
 
@@ -44,6 +45,17 @@ export function evaluateTyping(
     {
       flashcard_id: flashcardId,
       answer,
+    }
+  );
+}
+
+export function giveUpTyping(
+  flashcardId: number
+): Promise<TypingEvaluationResponse> {
+  return api.post<TypingEvaluationResponse>(
+    "/games/typing/give-up/",
+    {
+      flashcard_id: flashcardId,
     }
   );
 }
@@ -74,6 +86,19 @@ export function evaluateSentence(
   );
 }
 
+export function giveUpSentence(
+  flashcardId: number,
+  context: string
+): Promise<GameEvaluationResponse> {
+  return api.post<GameEvaluationResponse>(
+    "/games/sentence/give-up/",
+    {
+      flashcard_id: flashcardId,
+      context,
+    }
+  );
+}
+
 export function generateTranslation(
   flashcardId: number
 ): Promise<TranslationChallengeResponse> {
@@ -96,6 +121,19 @@ export function evaluateTranslation(
       flashcard_id: flashcardId,
       source_sentence: sourceSentence,
       answer,
+    }
+  );
+}
+
+export function giveUpTranslation(
+  flashcardId: number,
+  sourceSentence: string
+): Promise<GameEvaluationResponse> {
+  return api.post<GameEvaluationResponse>(
+    "/games/translation/give-up/",
+    {
+      flashcard_id: flashcardId,
+      source_sentence: sourceSentence,
     }
   );
 }
