@@ -1,13 +1,17 @@
+import { useRef } from "react";
 import {
   ScrollView,
   Text,
   View,
 } from "react-native";
 
-import { useTheme } from "../../contexts/ThemeContext";
+import { useTheme, ThemeColors } from "../../contexts/ThemeContext";
+import { formatRelativeTime } from "../../utils/relativeTime";
+import { languageLabel } from "../../constants/languages";
 
 import type {
   ChallengeActivityEntry,
+  ChallengeLanguageStat,
   ChallengeModeStat,
   ChallengeSkillStat,
   ChallengeStatsOverview,
@@ -16,6 +20,7 @@ import type {
 
 interface Props {
   overview: ChallengeStatsOverview | null;
+  languages: ChallengeLanguageStat[];
   modes: ChallengeModeStat[];
   skills: ChallengeSkillStat[];
   trend: ChallengeTrendPoint[];
@@ -46,375 +51,368 @@ const SKILL_SUBTITLES: Record<string, string> = {
   translation: "Transfer meaning between languages",
 };
 
-const ACCENT = "#8B5CF6";
-const CORAL = "#F97316";
-const PINK = "#EC4899";
+// Challenge stats already arrive as 0–100 (unlike the Learning tab's
+// 0.0–1.0 accuracy), so this only rounds for display — it does not
+// multiply by 100 again.
+function pct(value: number | null): string {
+  return value === null ? "—" : `${Math.round(value)}%`;
+}
 
-function formatRelativeTime(
-  value: string
+// Same threshold logic as AccuracyBadge's getAccuracyColor, just
+// against an already-0–100 value instead of a 0.0–1.0 fraction.
+function getPerformanceColor(
+  value: number | null,
+  colors: ThemeColors
 ): string {
-  const date = new Date(value);
+  if (value === null) return colors.textMuted;
+  if (value >= 85) return colors.success;
+  if (value >= 60) return colors.warning;
+  return colors.danger;
+}
+
+function formatTrendDate(value: string): string {
+  const date = new Date(`${value}T00:00:00`);
 
   if (Number.isNaN(date.getTime())) {
     return "";
   }
 
-  const diff = Math.max(
-    0,
-    Date.now() - date.getTime()
-  );
-
-  const seconds = Math.floor(
-    diff / 1000
-  );
-
-  if (seconds < 60) {
-    return "Just now";
-  }
-
-  const minutes = Math.floor(
-    seconds / 60
-  );
-
-  if (minutes < 60) {
-    return `${minutes}m ago`;
-  }
-
-  const hours = Math.floor(
-    minutes / 60
-  );
-
-  if (hours < 24) {
-    return `${hours}h ago`;
-  }
-
-  const days = Math.floor(
-    hours / 24
-  );
-
-  if (days < 7) {
-    return `${days}d ago`;
-  }
-
-  return date.toLocaleDateString();
+  return date.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+  });
 }
 
-function formatTrendDate(
-  value: string
-): string {
-  const date = new Date(
-    `${value}T00:00:00`
-  );
+// ============================================================================
+// SectionTitle — matches StatisticsScreen's local SectionTitle exactly,
+// so section headers look identical across both tabs.
+// ============================================================================
 
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
+function SectionTitle({ title }: { title: string }) {
+  const { colors } = useTheme();
 
-  return date.toLocaleDateString(
-    undefined,
-    {
-      day: "numeric",
-      month: "short",
-    }
+  return (
+    <Text
+      style={{
+        fontSize: 13,
+        fontWeight: "700",
+        color: colors.textMuted,
+        textTransform: "uppercase",
+        letterSpacing: 1.2,
+        marginBottom: 8,
+        marginLeft: 4,
+      }}
+    >
+      {title}
+    </Text>
   );
 }
 
-function SectionHeader({
-  eyebrow,
-  title,
-  mutedColor,
-  accentColor,
+// ============================================================================
+// ProgressBar — same shape used everywhere in the Learning tab:
+// 6px track on colors.border, filled bar in a passed-in color.
+// ============================================================================
+
+function ProgressBar({
+  value,
+  color,
 }: {
-  eyebrow: string;
-  title: string;
-  mutedColor: string;
-  accentColor: string;
+  value: number | null;
+  color: string;
 }) {
+  const { colors } = useTheme();
+  const normalized = Math.max(0, Math.min(100, value ?? 0));
+
   return (
     <View
       style={{
-        gap: 3,
-        marginBottom: 12,
+        height: 6,
+        backgroundColor: colors.border,
+        borderRadius: 3,
+        overflow: "hidden",
       }}
     >
-      <Text
+      <View
         style={{
-          fontSize: 11,
-          fontWeight: "800",
-          color: accentColor,
-          textTransform: "uppercase",
-          letterSpacing: 1.4,
+          width: `${normalized}%`,
+          height: 6,
+          backgroundColor: color,
+        }}
+      />
+    </View>
+  );
+}
+
+// ============================================================================
+// SUMMARY — hero success-rate number (like AccuracyBadge) + a row of
+// three stat boxes (like ReviewSummaryRow), both in the neutral
+// colors.surface/colors.border card language.
+// ============================================================================
+
+function SummaryHero({
+  overview,
+}: {
+  overview: ChallengeStatsOverview;
+}) {
+  const { colors } = useTheme();
+  const color = getPerformanceColor(
+    overview.success_rate,
+    colors
+  );
+
+  return (
+    <View
+      style={{
+        backgroundColor: colors.surface,
+        borderRadius: 16,
+        padding: 24,
+        alignItems: "center",
+        borderWidth: 1,
+        borderColor: colors.border,
+      }}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "baseline",
+          gap: 4,
         }}
       >
-        {eyebrow}
-      </Text>
+        <Text
+          style={{
+            fontSize: 48,
+            fontWeight: "800",
+            color,
+          }}
+        >
+          {Math.round(overview.success_rate)}
+        </Text>
+
+        <Text
+          style={{
+            fontSize: 24,
+            fontWeight: "700",
+            color,
+          }}
+        >
+          %
+        </Text>
+      </View>
 
       <Text
         style={{
-          fontSize: 20,
-          lineHeight: 24,
-          fontWeight: "800",
-          color: mutedColor,
+          fontSize: 13,
+          color: colors.textMuted,
+          textTransform: "uppercase",
+          fontWeight: "700",
+          marginTop: 4,
         }}
       >
-        {title}
+        Success rate
       </Text>
     </View>
   );
 }
 
-function ProgressBar({
-  value,
-  color,
-  trackColor,
+function SummaryStatsRow({
+  overview,
 }: {
-  value: number | null;
-  color: string;
-  trackColor: string;
+  overview: ChallengeStatsOverview;
 }) {
-  const normalized = Math.max(
-    0,
-    Math.min(100, value ?? 0)
+  const { colors } = useTheme();
+
+  const items = [
+    {
+      label: "Attempts",
+      value: String(overview.total_attempts),
+    },
+    {
+      label: "AI score",
+      value: pct(overview.average_ai_score),
+    },
+    {
+      label: "Give-up rate",
+      value: pct(overview.give_up_rate),
+    },
+  ];
+
+  return (
+    <View style={{ flexDirection: "row", gap: 12 }}>
+      {items.map((item) => (
+        <View
+          key={item.label}
+          style={{
+            flex: 1,
+            backgroundColor: colors.surface,
+            borderRadius: 16,
+            padding: 16,
+            alignItems: "center",
+            borderWidth: 1,
+            borderColor: colors.border,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 20,
+              fontWeight: "800",
+              color: colors.text,
+              marginBottom: 4,
+            }}
+          >
+            {item.value}
+          </Text>
+
+          <Text
+            style={{
+              fontSize: 11,
+              color: colors.textMuted,
+              textTransform: "uppercase",
+              fontWeight: "700",
+              textAlign: "center",
+            }}
+          >
+            {item.label}
+          </Text>
+        </View>
+      ))}
+    </View>
   );
+}
+
+// ============================================================================
+// LANGUAGES — same list shape as LanguageComparisonList on the
+// Learning tab: sorted strongest-first, with a called-out "weakest"
+// line when there's more than one pair with attempts.
+// ============================================================================
+
+function LanguageRow({
+  language,
+}: {
+  language: ChallengeLanguageStat;
+}) {
+  const { colors } = useTheme();
+  const color = getPerformanceColor(
+    language.success_rate,
+    colors
+  );
+
+  return (
+    <View style={{ gap: 4 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+        }}
+      >
+        <Text
+          style={{
+            fontWeight: "600",
+            color: colors.text,
+          }}
+        >
+          {languageLabel(language.native)} →{" "}
+          {languageLabel(language.learning)}
+        </Text>
+
+        <Text style={{ color: colors.textMuted }}>
+          {pct(language.success_rate)}
+        </Text>
+      </View>
+
+      <ProgressBar
+        value={language.success_rate}
+        color={color}
+      />
+
+      <Text
+        style={{
+          fontSize: 12,
+          color: colors.textMuted,
+        }}
+      >
+        {language.total_attempts}{" "}
+        {language.total_attempts === 1
+          ? "attempt"
+          : "attempts"}
+      </Text>
+    </View>
+  );
+}
+
+function LanguagesSection({
+  languages,
+}: {
+  languages: ChallengeLanguageStat[];
+}) {
+  const { colors } = useTheme();
+
+  if (languages.length === 0) {
+    return (
+      <Text style={{ color: colors.textMuted }}>
+        No language pairs yet.
+      </Text>
+    );
+  }
+
+  const withAttempts = languages.filter(
+    (lang) => lang.total_attempts > 0
+  );
+
+  const sorted = [...languages].sort(
+    (a, b) => b.success_rate - a.success_rate
+  );
+
+  const weakest =
+    withAttempts.length > 0
+      ? withAttempts.reduce((min, lang) =>
+          lang.success_rate < min.success_rate
+            ? lang
+            : min
+        )
+      : null;
 
   return (
     <View
       style={{
-        height: 7,
-        width: "100%",
-        borderRadius: 999,
-        backgroundColor: trackColor,
-        overflow: "hidden",
+        gap: 16,
+        backgroundColor: colors.surface,
+        padding: 16,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: colors.border,
       }}
     >
-      {value !== null && (
-        <View
-          style={{
-            width: `${normalized}%`,
-            height: "100%",
-            borderRadius: 999,
-            backgroundColor: color,
-          }}
+      {sorted.map((language) => (
+        <LanguageRow
+          key={language.language_pair_id}
+          language={language}
         />
+      ))}
+
+      {weakest && withAttempts.length > 1 && (
+        <Text
+          style={{
+            fontSize: 13,
+            color: colors.primary,
+          }}
+        >
+          Your weakest language in Challenges right
+          now: {languageLabel(weakest.native)} →{" "}
+          {languageLabel(weakest.learning)}
+        </Text>
       )}
     </View>
   );
 }
 
-function SummaryCard({
-  overview,
-  backgroundColor,
-  textColor,
-  mutedColor,
-}: {
-  overview: ChallengeStatsOverview;
-  backgroundColor: string;
-  textColor: string;
-  mutedColor: string;
-}) {
-  return (
-    <View
-      style={{
-        borderRadius: 24,
-        padding: 20,
-        gap: 18,
-        backgroundColor: ACCENT,
-      }}
-    >
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent:
-            "space-between",
-          alignItems: "flex-start",
-          gap: 16,
-        }}
-      >
-        <View
-          style={{
-            flex: 1,
-            gap: 5,
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 11,
-              fontWeight: "800",
-              color: textColor,
-              opacity: 0.72,
-              textTransform: "uppercase",
-              letterSpacing: 1.4,
-            }}
-          >
-            Challenges
-          </Text>
+// ============================================================================
+// MODES — one row per game type, styled like CategoryComparisonList:
+// name + percentage, thin progress bar, small caption line.
+// ============================================================================
 
-          <Text
-            style={{
-              fontSize: 28,
-              lineHeight: 32,
-              fontWeight: "900",
-              color: textColor,
-            }}
-          >
-            Practice
-          </Text>
+function ModeRow({ mode }: { mode: ChallengeModeStat }) {
+  const { colors } = useTheme();
 
-          <Text
-            style={{
-              fontSize: 13,
-              lineHeight: 19,
-              color: textColor,
-              opacity: 0.78,
-            }}
-          >
-            Your active vocabulary
-            performance
-          </Text>
-        </View>
-
-        <View
-          style={{
-            alignItems: "flex-end",
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 34,
-              lineHeight: 38,
-              fontWeight: "900",
-              color: textColor,
-            }}
-          >
-            {overview.success_rate}%
-          </Text>
-
-          <Text
-            style={{
-              fontSize: 12,
-              color: textColor,
-              opacity: 0.72,
-            }}
-          >
-            success rate
-          </Text>
-        </View>
-      </View>
-
-      <View
-        style={{
-          flexDirection: "row",
-          gap: 10,
-        }}
-      >
-        <View
-          style={{
-            flex: 1,
-            padding: 12,
-            borderRadius: 16,
-            backgroundColor:
-              "rgba(255,255,255,0.92)",
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 11,
-              color: mutedColor,
-              marginBottom: 3,
-            }}
-          >
-            Attempts
-          </Text>
-
-          <Text
-            style={{
-              fontSize: 21,
-              fontWeight: "800",
-              color: ACCENT,
-            }}
-          >
-            {overview.total_attempts}
-          </Text>
-        </View>
-
-        <View
-          style={{
-            flex: 1,
-            padding: 12,
-            borderRadius: 16,
-            backgroundColor:
-              "rgba(255,255,255,0.92)",
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 11,
-              color: mutedColor,
-              marginBottom: 3,
-            }}
-          >
-            AI score
-          </Text>
-
-          <Text
-            style={{
-              fontSize: 21,
-              fontWeight: "800",
-              color: CORAL,
-            }}
-          >
-            {overview.average_ai_score ===
-            null
-              ? "—"
-              : `${overview.average_ai_score}%`}
-          </Text>
-        </View>
-
-        <View
-          style={{
-            flex: 1,
-            padding: 12,
-            borderRadius: 16,
-            backgroundColor:
-              "rgba(255,255,255,0.92)",
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 11,
-              color: mutedColor,
-              marginBottom: 3,
-            }}
-          >
-            Skipped
-          </Text>
-
-          <Text
-            style={{
-              fontSize: 21,
-              fontWeight: "800",
-              color: PINK,
-            }}
-          >
-            {overview.give_up_rate}%
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function ModeCard({
-  mode,
-  mutedColor,
-  borderColor,
-  trackColor,
-}: {
-  mode: ChallengeModeStat;
-  mutedColor: string;
-  borderColor: string;
-  trackColor: string;
-}) {
   const isAiMode =
     mode.game_type === "sentence" ||
     mode.game_type === "translation";
@@ -423,567 +421,295 @@ function ModeCard({
     ? mode.average_ai_score
     : mode.success_rate;
 
-  const accentColor =
-    mode.game_type === "typing"
-      ? ACCENT
-      : mode.game_type ===
-          "sentence"
-        ? CORAL
-        : PINK;
+  const color = getPerformanceColor(
+    performance,
+    colors
+  );
 
   return (
-    <View
-      style={{
-        paddingVertical: 15,
-        borderBottomWidth: 1,
-        borderBottomColor: borderColor,
-        gap: 10,
-      }}
-    >
+    <View style={{ gap: 4 }}>
       <View
         style={{
           flexDirection: "row",
-          alignItems: "center",
-          gap: 12,
-        }}
-      >
-        <View
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 14,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor:
-              `${accentColor}16`,
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 12,
-              fontWeight: "900",
-              color: accentColor,
-            }}
-          >
-            {GAME_SHORT_LABELS[
-              mode.game_type
-            ]
-              .slice(0, 2)
-              .toUpperCase()}
-          </Text>
-        </View>
-
-        <View
-          style={{
-            flex: 1,
-            gap: 3,
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 15,
-              fontWeight: "800",
-              color: accentColor,
-            }}
-          >
-            {GAME_LABELS[mode.game_type]}
-          </Text>
-
-          <Text
-            style={{
-              fontSize: 12,
-              color: mutedColor,
-            }}
-          >
-            {mode.attempts}{" "}
-            {mode.attempts === 1
-              ? "attempt"
-              : "attempts"}
-            {" · "}
-            {mode.answered_attempts}{" "}
-            answered
-          </Text>
-        </View>
-
-        <View
-          style={{
-            alignItems: "flex-end",
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 20,
-              fontWeight: "900",
-              color: accentColor,
-            }}
-          >
-            {performance === null
-              ? "—"
-              : `${performance}%`}
-          </Text>
-
-          <Text
-            style={{
-              fontSize: 10,
-              color: mutedColor,
-            }}
-          >
-            {isAiMode
-              ? "AI score"
-              : "performance"}
-          </Text>
-        </View>
-      </View>
-
-      <ProgressBar
-        value={performance}
-        color={accentColor}
-        trackColor={`${accentColor}18`}
-      />
-
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent:
-            "space-between",
-          alignItems: "center",
+          justifyContent: "space-between",
         }}
       >
         <Text
           style={{
-            fontSize: 11,
-            color: mutedColor,
+            fontWeight: "600",
+            color: colors.text,
           }}
         >
-          Success {mode.success_rate}%
+          {GAME_LABELS[mode.game_type]}
         </Text>
 
-        {isAiMode &&
-          mode.average_ai_score !==
-            null && (
-            <Text
-              style={{
-                fontSize: 11,
-                color: mutedColor,
-              }}
-            >
-              AI evaluation
-            </Text>
-          )}
+        <Text style={{ color: colors.textMuted }}>
+          {pct(performance)}
+        </Text>
       </View>
+
+      <ProgressBar value={performance} color={color} />
+
+      <Text
+        style={{
+          fontSize: 12,
+          color: colors.textMuted,
+        }}
+      >
+        {mode.attempts}{" "}
+        {mode.attempts === 1 ? "attempt" : "attempts"}
+        {" · "}
+        Success {pct(mode.success_rate)}
+        {isAiMode &&
+          mode.average_ai_score !== null &&
+          " · AI-scored"}
+      </Text>
     </View>
   );
 }
 
-function SkillCard({
-  skill,
-  mutedColor,
-}: {
-  skill: ChallengeSkillStat;
-  mutedColor: string;
-}) {
-  const accentColor =
-    skill.skill === "recall"
-      ? ACCENT
-      : skill.skill ===
-          "sentence_usage"
-        ? CORAL
-        : PINK;
+// ============================================================================
+// SKILLS — same row shape as ModeRow, with a description line instead
+// of the attempts caption.
+// ============================================================================
+
+function SkillRow({ skill }: { skill: ChallengeSkillStat }) {
+  const { colors } = useTheme();
+  const color = getPerformanceColor(
+    skill.performance,
+    colors
+  );
 
   return (
-    <View
-      style={{
-        padding: 15,
-        borderRadius: 18,
-        backgroundColor:
-          `${accentColor}10`,
-        gap: 11,
-      }}
-    >
+    <View style={{ gap: 4 }}>
       <View
         style={{
           flexDirection: "row",
-          alignItems: "flex-start",
-          gap: 12,
+          justifyContent: "space-between",
         }}
       >
-        <View
+        <Text
           style={{
-            width: 42,
-            height: 42,
-            borderRadius: 13,
-            backgroundColor:
-              accentColor,
-            alignItems: "center",
-            justifyContent: "center",
+            fontWeight: "600",
+            color: colors.text,
           }}
         >
-          <Text
-            style={{
-              fontSize: 13,
-              fontWeight: "900",
-              color: "#FFFFFF",
-            }}
-          >
-            {skill.label
-              .slice(0, 1)
-              .toUpperCase()}
-          </Text>
-        </View>
+          {skill.label}
+        </Text>
 
-        <View
-          style={{
-            flex: 1,
-            gap: 3,
-          }}
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent:
-                "space-between",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <Text
-              style={{
-                flex: 1,
-                fontSize: 15,
-                fontWeight: "800",
-                color: accentColor,
-              }}
-            >
-              {skill.label}
-            </Text>
-
-            <Text
-              style={{
-                fontSize: 15,
-                fontWeight: "900",
-                color: accentColor,
-              }}
-            >
-              {skill.performance ===
-              null
-                ? "—"
-                : `${skill.performance}%`}
-            </Text>
-          </View>
-
-          <Text
-            style={{
-              fontSize: 12,
-              lineHeight: 18,
-              color: mutedColor,
-            }}
-          >
-            {SKILL_SUBTITLES[
-              skill.skill
-            ] ??
-              "Practice this skill through challenges"}
-          </Text>
-        </View>
+        <Text style={{ color: colors.textMuted }}>
+          {pct(skill.performance)}
+        </Text>
       </View>
 
-      <ProgressBar
-        value={skill.performance}
-        color={accentColor}
-        trackColor={`${accentColor}18`}
-      />
+      <ProgressBar value={skill.performance} color={color} />
+
+      <Text
+        style={{
+          fontSize: 12,
+          color: colors.textMuted,
+        }}
+      >
+        {SKILL_SUBTITLES[skill.skill] ??
+          "Practice this skill through challenges"}
+      </Text>
     </View>
   );
 }
 
-function TrendCard({
+// ============================================================================
+// TREND — vertical bar chart, same visual family as TrendChart
+// (bars + weekday-ish label), just theme-aware and length-agnostic.
+// ============================================================================
+
+function TrendChart({
   trend,
-  primaryColor,
-  mutedColor,
 }: {
   trend: ChallengeTrendPoint[];
-  primaryColor: string;
-  mutedColor: string;
 }) {
-  const validValues = trend
-    .map(
-      (point) => point.performance
-    )
-    .filter(
-      (
-        value
-      ): value is number =>
-        value !== null
+  const { colors } = useTheme();
+  const CHART_HEIGHT = 90;
+
+  // trend is ordered oldest -> newest (left -> right), so "today"
+  // is the last item. A ScrollView opens at its start by default,
+  // which for a 14-day window means a brand-new user lands on empty
+  // pre-signup days instead of their actual activity. Scrolling to
+  // the end on every content-size change (initial load and any
+  // later refresh) fixes that without changing the chronological
+  // order — the user can still scroll left to see older history.
+  const scrollRef = useRef<ScrollView>(null);
+
+  if (trend.every((point) => point.attempts === 0)) {
+    return (
+      <Text style={{ color: colors.textMuted }}>
+        No challenge attempts in this period yet.
+      </Text>
     );
-
-  const maxValue =
-    validValues.length > 0
-      ? Math.max(...validValues, 100)
-      : 100;
-
-  const latestValue =
-    [...trend]
-      .reverse()
-      .find(
-        (point) =>
-          point.performance !== null
-      )?.performance ?? null;
+  }
 
   return (
-    <View
-      style={{
-        borderRadius: 20,
-        padding: 16,
-        gap: 14,
-        backgroundColor:
-          `${ACCENT}0D`,
+    <ScrollView
+      ref={scrollRef}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      onContentSizeChange={() =>
+        scrollRef.current?.scrollToEnd({
+          animated: false,
+        })
+      }
+      contentContainerStyle={{
+        flexDirection: "row",
+        alignItems: "flex-end",
+        gap: 8,
+        paddingVertical: 4,
       }}
     >
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent:
-            "space-between",
-          alignItems: "flex-end",
-        }}
-      >
-        <View style={{ gap: 3 }}>
-          <Text
+      {trend.map((point) => {
+        const color = getPerformanceColor(
+          point.performance,
+          colors
+        );
+
+        const barHeight = Math.max(
+          4,
+          ((point.performance ?? 0) / 100) *
+            CHART_HEIGHT
+        );
+
+        return (
+          <View
+            key={point.date}
             style={{
-              fontSize: 12,
-              color: mutedColor,
+              width: 28,
+              alignItems: "center",
+              gap: 4,
             }}
           >
-            Last 14 days
-          </Text>
-
-          <Text
-            style={{
-              fontSize: 25,
-              fontWeight: "900",
-              color: primaryColor,
-            }}
-          >
-            {latestValue === null
-              ? "—"
-              : `${latestValue}%`}
-          </Text>
-        </View>
-
-        <Text
-          style={{
-            fontSize: 11,
-            color: mutedColor,
-          }}
-        >
-          daily performance
-        </Text>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={
-          false
-        }
-        contentContainerStyle={{
-          gap: 9,
-          paddingVertical: 4,
-        }}
-      >
-        {trend.map((point) => {
-          const value =
-            point.performance;
-
-          const height =
-            value === null
-              ? 5
-              : Math.max(
-                  8,
-                  (value /
-                    maxValue) *
-                    100
-                );
-
-          return (
-            <View
-              key={point.date}
+            <Text
               style={{
-                width: 30,
-                alignItems: "center",
-                gap: 5,
+                fontSize: 10,
+                color: colors.textMuted,
               }}
             >
-              <Text
-                style={{
-                  fontSize: 9,
-                  fontWeight: "700",
-                  color: mutedColor,
-                }}
-              >
-                {value === null
-                  ? "—"
-                  : Math.round(value)}
-              </Text>
+              {point.performance !== null
+                ? `${Math.round(point.performance)}%`
+                : ""}
+            </Text>
 
-              <View
-                style={{
-                  height: 100,
-                  width: 8,
-                  borderRadius: 999,
-                  backgroundColor:
-                    `${ACCENT}18`,
-                  justifyContent:
-                    "flex-end",
-                  overflow: "hidden",
-                }}
-              >
-                <View
-                  style={{
-                    height,
-                    width: 8,
-                    borderRadius: 999,
-                    backgroundColor:
-                      value === null
-                        ? mutedColor
-                        : ACCENT,
-                    opacity:
-                      value === null
-                        ? 0.3
-                        : 1,
-                  }}
-                />
-              </View>
+            <View
+              style={{
+                width: "100%",
+                height: barHeight,
+                borderRadius: 4,
+                backgroundColor:
+                  point.performance === null
+                    ? colors.border
+                    : color,
+              }}
+            />
 
-              <Text
-                style={{
-                  fontSize: 9,
-                  color: mutedColor,
-                  textAlign: "center",
-                }}
-              >
-                {formatTrendDate(
-                  point.date
-                )}
-              </Text>
-            </View>
-          );
-        })}
-      </ScrollView>
-    </View>
+            <Text
+              style={{
+                fontSize: 10,
+                color: colors.textMuted,
+              }}
+            >
+              {formatTrendDate(point.date)}
+            </Text>
+          </View>
+        );
+      })}
+    </ScrollView>
   );
 }
+
+// ============================================================================
+// RECENT ACTIVITY — same row shape as RecentActivityList: a result
+// glyph, the word, a relative timestamp, and a trailing score.
+// ============================================================================
 
 function ActivityRow({
   entry,
-  mutedColor,
-  borderColor,
 }: {
   entry: ChallengeActivityEntry;
-  mutedColor: string;
-  borderColor: string;
 }) {
-  let resultLabel = "Incorrect";
+  const { colors } = useTheme();
+
+  let icon = "✗";
+  let color = colors.danger;
 
   if (entry.gave_up) {
-    resultLabel = "Skipped";
+    icon = "—";
+    color = colors.textMuted;
   } else if (entry.is_correct) {
-    resultLabel = "Correct";
+    icon = "✓";
+    color = colors.success;
   }
-
-  const accentColor =
-    entry.game_type === "typing"
-      ? ACCENT
-      : entry.game_type ===
-          "sentence"
-        ? CORAL
-        : PINK;
 
   return (
     <View
       style={{
         flexDirection: "row",
         alignItems: "center",
-        gap: 12,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor:
-          borderColor,
+        gap: 10,
       }}
     >
-      <View
+      <Text
         style={{
-          width: 40,
-          height: 40,
-          borderRadius: 13,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor:
-            `${accentColor}14`,
+          color,
+          fontWeight: "700",
+          width: 16,
         }}
       >
-        <Text
-          style={{
-            fontSize: 10,
-            fontWeight: "900",
-            color: accentColor,
-          }}
-        >
-          {GAME_SHORT_LABELS[
-            entry.game_type
-          ]
-            .slice(0, 2)
-            .toUpperCase()}
-        </Text>
-      </View>
+        {icon}
+      </Text>
 
-      <View
-        style={{
-          flex: 1,
-          gap: 3,
-        }}
-      >
-        <Text
-          style={{
-            fontSize: 14,
-            fontWeight: "800",
-            color: accentColor,
-          }}
-        >
-          {GAME_SHORT_LABELS[
-            entry.game_type
-          ]}
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: colors.text }}>
+          {entry.flashcard_text}
         </Text>
 
         <Text
           style={{
             fontSize: 11,
-            color: mutedColor,
+            color: colors.textMuted,
           }}
         >
-          {resultLabel}
-          {" · "}
-          {formatRelativeTime(
-            entry.created_at
-          )}
+          {GAME_SHORT_LABELS[entry.game_type]}
         </Text>
       </View>
 
       {entry.score !== null && (
         <Text
           style={{
-            fontSize: 14,
-            fontWeight: "900",
-            color: accentColor,
+            fontSize: 13,
+            fontWeight: "700",
+            color: colors.textMuted,
           }}
         >
-          {entry.score}%
+          {pct(entry.score)}
         </Text>
       )}
+
+      <Text
+        style={{
+          fontSize: 12,
+          color: colors.textMuted,
+        }}
+      >
+        {formatRelativeTime(entry.created_at)}
+      </Text>
     </View>
   );
 }
 
+// ============================================================================
+// ROOT
+// ============================================================================
+
 export default function ChallengesStatsView({
   overview,
+  languages,
   modes,
   skills,
   trend,
@@ -1002,9 +728,9 @@ export default function ChallengesStatsView({
       >
         <Text
           style={{
-            fontSize: 18,
-            fontWeight: "800",
-            color: ACCENT,
+            fontSize: 16,
+            fontWeight: "700",
+            color: colors.text,
             textAlign: "center",
           }}
         >
@@ -1020,8 +746,8 @@ export default function ChallengesStatsView({
             textAlign: "center",
           }}
         >
-          We couldn't load your challenge
-          statistics right now.
+          We couldn't load your challenge statistics
+          right now.
         </Text>
       </View>
     );
@@ -1031,27 +757,26 @@ export default function ChallengesStatsView({
     return (
       <View
         style={{
-          paddingVertical: 60,
+          paddingVertical: 50,
           alignItems: "center",
           gap: 10,
         }}
       >
         <View
           style={{
-            width: 64,
-            height: 64,
-            borderRadius: 22,
-            backgroundColor:
-              `${ACCENT}16`,
+            width: 56,
+            height: 56,
+            borderRadius: 16,
+            backgroundColor: colors.primary + "1A",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
           <Text
             style={{
-              fontSize: 24,
-              fontWeight: "900",
-              color: ACCENT,
+              fontSize: 22,
+              fontWeight: "800",
+              color: colors.primary,
             }}
           >
             +
@@ -1061,8 +786,8 @@ export default function ChallengesStatsView({
         <Text
           style={{
             marginTop: 4,
-            fontSize: 20,
-            fontWeight: "900",
+            fontSize: 17,
+            fontWeight: "700",
             color: colors.text,
             textAlign: "center",
           }}
@@ -1072,193 +797,95 @@ export default function ChallengesStatsView({
 
         <Text
           style={{
-            maxWidth: 290,
-            fontSize: 14,
-            lineHeight: 21,
+            maxWidth: 280,
+            fontSize: 13,
+            lineHeight: 20,
             color: colors.textMuted,
             textAlign: "center",
           }}
         >
-          Practice recall, sentence usage,
-          and translation to build stronger
-          active vocabulary.
+          Practice recall, sentence usage, and
+          translation to build stronger active
+          vocabulary.
         </Text>
       </View>
     );
   }
 
-  const borderColor =
-    `${colors.textMuted}20`;
-
   return (
-    <View
-      style={{
-        gap: 30,
-      }}
-    >
-      {/* ================================================================== */}
-      {/* SUMMARY                                                            */}
-      {/* ================================================================== */}
-
-      <SummaryCard
-        overview={overview}
-        backgroundColor={
-          colors.background
-        }
-        textColor={colors.background}
-        mutedColor={colors.textMuted}
-      />
-
-      {/* ================================================================== */}
-      {/* MODES                                                              */}
-      {/* ================================================================== */}
+    <View style={{ gap: 24 }}>
+      <View style={{ gap: 12 }}>
+        <SummaryHero overview={overview} />
+        <SummaryStatsRow overview={overview} />
+      </View>
 
       <View>
-        <SectionHeader
-          eyebrow="Modes"
-          title="Challenge performance"
-          mutedColor={colors.text}
-          accentColor={ACCENT}
-        />
+        <SectionTitle title="Languages" />
+
+        <LanguagesSection languages={languages} />
+      </View>
+
+      <View>
+        <SectionTitle title="Challenge performance" />
 
         <View
           style={{
-            paddingHorizontal: 4,
+            gap: 16,
+            backgroundColor: colors.surface,
+            padding: 16,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: colors.border,
           }}
         >
           {modes.map((mode) => (
-            <ModeCard
-              key={mode.game_type}
-              mode={mode}
-              mutedColor={
-                colors.textMuted
-              }
-              borderColor={
-                borderColor
-              }
-              trackColor={
-                colors.textMuted
-              }
-            />
+            <ModeRow key={mode.game_type} mode={mode} />
           ))}
         </View>
       </View>
 
-      {/* ================================================================== */}
-      {/* SKILLS                                                             */}
-      {/* ================================================================== */}
-
       <View>
-        <SectionHeader
-          eyebrow="Skills"
-          title="What you're practicing"
-          mutedColor={colors.text}
-          accentColor={CORAL}
-        />
-
-        <View style={{ gap: 10 }}>
-          {skills.map((skill) => (
-            <SkillCard
-              key={skill.skill}
-              skill={skill}
-              mutedColor={
-                colors.textMuted
-              }
-            />
-          ))}
-        </View>
-      </View>
-
-      {/* ================================================================== */}
-      {/* TREND                                                              */}
-      {/* ================================================================== */}
-
-      <View>
-        <SectionHeader
-          eyebrow="Progress"
-          title="Performance trend"
-          mutedColor={colors.text}
-          accentColor={PINK}
-        />
-
-        {trend.length > 0 ? (
-          <TrendCard
-            trend={trend}
-            primaryColor={ACCENT}
-            mutedColor={
-              colors.textMuted
-            }
-          />
-        ) : (
-          <View
-            style={{
-              padding: 18,
-              borderRadius: 18,
-              backgroundColor:
-                `${ACCENT}0D`,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 13,
-                color: colors.textMuted,
-              }}
-            >
-              No trend data available yet.
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* ================================================================== */}
-      {/* ACTIVITY                                                           */}
-      {/* ================================================================== */}
-
-      <View>
-        <SectionHeader
-          eyebrow="History"
-          title="Recent activity"
-          mutedColor={colors.text}
-          accentColor={CORAL}
-        />
+        <SectionTitle title="Active skills" />
 
         <View
           style={{
-            paddingHorizontal: 4,
+            gap: 16,
+            backgroundColor: colors.surface,
+            padding: 16,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: colors.border,
           }}
         >
-          {recentActivity.length >
-          0 ? (
-            recentActivity.map(
-              (entry) => (
-                <ActivityRow
-                  key={entry.id}
-                  entry={entry}
-                  mutedColor={
-                    colors.textMuted
-                  }
-                  borderColor={
-                    borderColor
-                  }
-                />
-              )
-            )
-          ) : (
-            <Text
-              style={{
-                paddingVertical: 16,
-                fontSize: 13,
-                color:
-                  colors.textMuted,
-              }}
-            >
-              No recent challenge
-              activity.
-            </Text>
-          )}
+          {skills.map((skill) => (
+            <SkillRow key={skill.skill} skill={skill} />
+          ))}
         </View>
+      </View>
+
+      <View>
+        <SectionTitle
+          title={`Performance trend · last ${trend.length} days`}
+        />
+
+        <TrendChart trend={trend} />
+      </View>
+
+      <View>
+        <SectionTitle title="Recent challenge activity" />
+
+        {recentActivity.length > 0 ? (
+          <View style={{ gap: 8 }}>
+            {recentActivity.map((entry) => (
+              <ActivityRow key={entry.id} entry={entry} />
+            ))}
+          </View>
+        ) : (
+          <Text style={{ color: colors.textMuted }}>
+            No recent challenge activity.
+          </Text>
+        )}
       </View>
     </View>
   );
 }
-

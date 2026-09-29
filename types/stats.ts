@@ -79,6 +79,16 @@ export interface ChallengeStatsOverview {
   average_ai_score: number | null;
 }
 
+// Same six numbers as ChallengeStatsOverview, scoped to one language
+// pair instead of the whole user — mirrors LanguageStat on the
+// Learning side.
+export interface ChallengeLanguageStat
+  extends ChallengeStatsOverview {
+  language_pair_id: number;
+  native: string;
+  learning: string;
+}
+
 export interface ChallengeModeStat {
   game_type: ChallengeGameType;
 
@@ -173,6 +183,11 @@ export interface ChallengeActivityEntry {
   score: number | null;
 
   feedback: string;
+
+  /**
+   * The flashcard's target-language word/phrase this attempt was on.
+   */
+  flashcard_text: string;
 
   /**
    * ISO datetime.

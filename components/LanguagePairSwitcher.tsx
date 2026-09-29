@@ -6,7 +6,7 @@ import { useLanguagePair } from "../contexts/LanguagePairContext";
 import { ApiClientError } from "../services/api";
 import { useTheme } from "../contexts/ThemeContext";
 import { useSharedStyles } from "../hooks/useSharedStyles";
-import { languageLabel } from "../constants/languages";
+import { languageLabel, languageFlag } from "../constants/languages";
 import type { LanguageCode } from "../constants/languages";
 import LanguagePicker from "./LanguagePicker";
 
@@ -75,16 +75,44 @@ export default function LanguagePairSwitcher() {
         }}
         onPress={() => setModalVisible(true)}
       >
-        <View>
-          <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "700", letterSpacing: 0.5, marginBottom: 4 }}>
-            ACTIVE PAIR
-          </Text>
-          <Text style={{ fontSize: 18, fontWeight: "700", color: colors.text }}>
-            {activePair
-              ? `${languageLabel(activePair.native_language)} → ${languageLabel(activePair.learning_language)}`
-              : "Select a pair"}
-          </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <View
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 14,
+              backgroundColor: colors.primary + "1A",
+              alignItems: "center",
+              justifyContent: "center",
+              flexDirection: "row",
+            }}
+          >
+            {activePair ? (
+              <>
+                <Text style={{ fontSize: 15 }}>
+                  {languageFlag(activePair.native_language)}
+                </Text>
+                <Text style={{ fontSize: 15 }}>
+                  {languageFlag(activePair.learning_language)}
+                </Text>
+              </>
+            ) : (
+              <Feather name="globe" size={20} color={colors.primary} />
+            )}
+          </View>
+
+          <View>
+            <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "700", letterSpacing: 0.5, marginBottom: 4 }}>
+              ACTIVE PAIR
+            </Text>
+            <Text style={{ fontSize: 18, fontWeight: "700", color: colors.text }}>
+              {activePair
+                ? `${languageLabel(activePair.native_language)} → ${languageLabel(activePair.learning_language)}`
+                : "Select a pair"}
+            </Text>
+          </View>
         </View>
+
         <Feather name="chevron-down" size={24} color={colors.primary} />
       </TouchableOpacity>
 
@@ -116,16 +144,59 @@ export default function LanguagePairSwitcher() {
                 const isActive = activePair?.id === item.id;
                 return (
                   <TouchableOpacity
-                    style={[shared.row, { borderRadius: 12 }, isActive && shared.rowActive]}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: 12,
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      borderColor: isActive ? colors.primary : colors.border,
+                      backgroundColor: isActive
+                        ? colors.primary + "12"
+                        : colors.background,
+                      marginBottom: 8,
+                    }}
                     onPress={() => { selectPair(item.id); closeModal(); }}
                     onLongPress={() =>
                       handleDelete(item.id, `${languageLabel(item.native_language)} → ${languageLabel(item.learning_language)}`)
                     }
                   >
-                    <Text style={[shared.rowText, isActive && { color: colors.primary, fontWeight: "600" }]}>
+                    <View
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 11,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexDirection: "row",
+                        backgroundColor: isActive
+                          ? colors.primary + "22"
+                          : colors.surface,
+                      }}
+                    >
+                      <Text style={{ fontSize: 15 }}>
+                        {languageFlag(item.native_language)}
+                      </Text>
+                      <Text style={{ fontSize: 15 }}>
+                        {languageFlag(item.learning_language)}
+                      </Text>
+                    </View>
+
+                    <Text
+                      style={{
+                        flex: 1,
+                        fontSize: 15,
+                        fontWeight: isActive ? "700" : "500",
+                        color: isActive ? colors.primary : colors.text,
+                      }}
+                    >
                       {languageLabel(item.native_language)} → {languageLabel(item.learning_language)}
                     </Text>
-                    {isActive && <Text style={[shared.hint, { color: colors.primary }]}>Active</Text>}
+
+                    {isActive && (
+                      <Feather name="check-circle" size={20} color={colors.primary} />
+                    )}
                   </TouchableOpacity>
                 );
               }}
@@ -138,14 +209,28 @@ export default function LanguagePairSwitcher() {
             ) : (
               <View style={{ gap: 12, backgroundColor: colors.background, padding: 16, borderRadius: 16 }}>
                 <TouchableOpacity style={shared.input} onPress={() => setPickerFor("native")}>
-                  <Text style={{ color: nativeCode ? colors.text : colors.placeholder }}>
-                    {nativeCode ? languageLabel(nativeCode) : "Native language"}
-                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    {nativeCode && (
+                      <Text style={{ fontSize: 17 }}>
+                        {languageFlag(nativeCode)}
+                      </Text>
+                    )}
+                    <Text style={{ color: nativeCode ? colors.text : colors.placeholder }}>
+                      {nativeCode ? languageLabel(nativeCode) : "Native language"}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
                 <TouchableOpacity style={shared.input} onPress={() => setPickerFor("learning")}>
-                  <Text style={{ color: learningCode ? colors.text : colors.placeholder }}>
-                    {learningCode ? languageLabel(learningCode) : "Learning language"}
-                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    {learningCode && (
+                      <Text style={{ fontSize: 17 }}>
+                        {languageFlag(learningCode)}
+                      </Text>
+                    )}
+                    <Text style={{ color: learningCode ? colors.text : colors.placeholder }}>
+                      {learningCode ? languageLabel(learningCode) : "Learning language"}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
 
                 {sameLanguage && <Text style={shared.error}>Native and learning language must differ.</Text>}

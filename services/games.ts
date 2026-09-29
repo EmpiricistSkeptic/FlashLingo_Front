@@ -28,9 +28,10 @@ export interface TranslationChallengeResponse {
 
 export interface GameEvaluationResponse {
   game_type: "sentence" | "translation";
-  flashcard_id: number;
   is_correct: boolean;
-  score: number;
+  // null on a give-up response: no evaluation happened, so there's
+  // nothing to score — not the same as an AI-assigned 0.
+  score: number | null;
   feedback: string;
   explanation: string;
   correction: string | null;
@@ -86,6 +87,10 @@ export function evaluateSentence(
   );
 }
 
+// Response shape matches GameEvaluationResponse: is_correct will
+// always be false and score 0, but reusing the type lets the UI
+// render this exactly like a normal (failed) evaluation, with the
+// AI-generated example sentence sitting in `correction`.
 export function giveUpSentence(
   flashcardId: number,
   context: string
@@ -125,6 +130,7 @@ export function evaluateTranslation(
   );
 }
 
+// Same reasoning as giveUpSentence above.
 export function giveUpTranslation(
   flashcardId: number,
   sourceSentence: string

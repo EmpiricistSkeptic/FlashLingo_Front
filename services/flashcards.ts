@@ -86,3 +86,19 @@ export function getDueFlashcards(
   });
 }
 
+// GET /flashcards/duplicates/?text=&language_pair=&exclude=
+// Non-blocking check: returns the user's existing cards with the same text
+// within one language pair. `exclude` skips the card being edited.
+export function findDuplicates(
+  text: string,
+  languagePairId: number,
+  excludeId?: number
+): Promise<DuplicateFlashcard[]> {
+  const params: Record<string, string | number> = {
+    text,
+    language_pair: languagePairId,
+  };
+  if (excludeId !== undefined) params.exclude = excludeId;
+
+  return api.get<DuplicateFlashcard[]>("/flashcards/duplicates/", params);
+}

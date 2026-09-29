@@ -1,12 +1,12 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
   ScrollView,
   RefreshControl,
   ActivityIndicator,
-  SafeAreaView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router/react-navigation";
 import { useRouter } from "expo-router";
 
@@ -41,6 +41,7 @@ import type {
   TrendPoint,
   ProgressEntry,
   ChallengeStatsOverview,
+  ChallengeLanguageStat,
   ChallengeModeStat,
   ChallengeSkillStat,
   ChallengeTrendPoint,
@@ -83,12 +84,21 @@ export default function StatisticsScreen() {
   const [recentActivity, setRecentActivity] =
     useState<ProgressEntry[]>([]);
 
+  const [isLearningLoading, setIsLearningLoading] =
+    useState(true);
+
+  const [learningError, setLearningError] =
+    useState<string | null>(null);
+
   // ===========================================================================
   // CHALLENGE STATS
   // ===========================================================================
 
   const [challengeOverview, setChallengeOverview] =
     useState<ChallengeStatsOverview | null>(null);
+
+  const [challengeLanguages, setChallengeLanguages] =
+    useState<ChallengeLanguageStat[]>([]);
 
   const [challengeModes, setChallengeModes] =
     useState<ChallengeModeStat[]>([]);
@@ -104,30 +114,30 @@ export default function StatisticsScreen() {
     setRecentChallengeActivity,
   ] = useState<ChallengeActivityEntry[]>([]);
 
-  // ===========================================================================
-  // COMMON STATE
-  // ===========================================================================
+  const [isChallengesLoading, setIsChallengesLoading] =
+    useState(false);
 
-  const [isLoading, setIsLoading] =
-    useState(true);
+  // True only after a *successful* Challenges load. A failed load
+  // deliberately leaves this false, so the next time the user opens
+  // the tab it retries automatically instead of silently caching a
+  // failure as if it were good data — a manual pull-to-refresh still
+  // works as an explicit retry in the meantime.
+  const [challengesLoaded, setChallengesLoaded] =
+    useState(false);
 
-  const [error, setError] =
+  const [challengesError, setChallengesError] =
     useState<string | null>(null);
 
   // ===========================================================================
-  // LOAD
+  // LOAD — LEARNING
   // ===========================================================================
 
-  const load = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  const loadLearning = useCallback(async () => {
+    setIsLearningLoading(true);
+    setLearningError(null);
 
     try {
       const requests: Promise<unknown>[] = [
-        // ---------------------------------------------------------------------
-        // Learning / SRS
-        // ---------------------------------------------------------------------
-
         statsService
           .getOverview()
           .then(setOverview),
@@ -139,35 +149,7 @@ export default function StatisticsScreen() {
         statsService
           .getRecentProgress(8)
           .then(setRecentActivity),
-
-        // ---------------------------------------------------------------------
-        // Challenges
-        // ---------------------------------------------------------------------
-
-        statsService
-          .getGameStatsOverview()
-          .then(setChallengeOverview),
-
-        statsService
-          .getGameStatsModes()
-          .then(setChallengeModes),
-
-        statsService
-          .getGameStatsSkills()
-          .then(setChallengeSkills),
-
-        statsService
-          .getGameStatsTrend()
-          .then(setChallengeTrend),
-
-        statsService
-          .getRecentGameActivity(8)
-          .then(setRecentChallengeActivity),
       ];
-
-      // -----------------------------------------------------------------------
-      // Pair-dependent Learning statistics
-      // -----------------------------------------------------------------------
 
       if (activePair) {
         requests.push(
@@ -191,7 +173,7 @@ export default function StatisticsScreen() {
 
       await Promise.all(requests);
     } catch (e: unknown) {
-      setError(
+      setLearningError(
         e instanceof ApiClientError
           ? e.detail
           : e instanceof Error
@@ -199,31 +181,150 @@ export default function StatisticsScreen() {
             : "Failed to load statistics."
       );
     } finally {
-      setIsLoading(false);
+      setIsLearningLoading(false);
     }
   }, [activePair]);
 
   // ===========================================================================
-  // RELOAD WHEN SCREEN GETS FOCUS
+  // LOAD — CHALLENGES
+  //
+  // Always performs a real fetch when called — it does not check
+  // challengesLoaded itself. Callers (tab switch, pair-change effect,
+  // pull-to-refresh) decide whether calling it is warranted.
+  // ===========================================================================
+
+  const loadChallenges = useCallback(async () => {
+    setIsChallengesLoading(true);
+    setChallengesError(null);
+
+    try {
+      await Promise.all([
+        statsService
+          .getGameStatsOverview(activePair?.id)
+          .then(setChallengeOverview),
+
+        statsService
+          .getGameStatsLanguages()
+          .then(setChallengeLanguages),
+
+        statsService
+          .getGameStatsModes(activePair?.id)
+          .then(setChallengeModes),
+
+        statsService
+          .getGameStatsSkills(activePair?.id)
+          .then(setChallengeSkills),
+
+        statsService
+          .getGameStatsTrend(activePair?.id)
+          .then(setChallengeTrend),
+
+        statsService
+          .getRecentGameActivity(8, activePair?.id)
+          .then(setRecentChallengeActivity),
+      ]);
+
+      setChallengesLoaded(true);
+    } catch (e: unknown) {
+      setChallengesError(
+        e instanceof ApiClientError
+          ? e.detail
+          : e instanceof Error
+            ? e.message
+            : "Failed to load challenge statistics."
+      );
+    } finally {
+      setIsChallengesLoading(false);
+    }
+  }, [activePair]);
+
+  // ===========================================================================
+  // LEARNING REFRESHES ON EVERY FOCUS — CHALLENGES DOES NOT
   // ===========================================================================
 
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [load])
+      loadLearning();
+    }, [loadLearning])
   );
 
   // ===========================================================================
-  // INITIAL LOADING
+  // INVALIDATE CHALLENGES WHEN THE ACTIVE PAIR CHANGES
+  //
+  // Games stats are scoped by language pair. If the user already had
+  // Challenges loaded for pair A and switches their active pair to B,
+  // the cached numbers would silently be A's — stale and wrong for
+  // the pair now showing. Reset the cache flag, and if the user is
+  // already looking at the Challenges tab, reload immediately rather
+  // than waiting for another tab switch.
+  //
+  // Deliberately scoped to activePair?.id only: this effect reacts to
+  // the pair changing, not to tab switches (handleTabChange handles
+  // that) or to challenges-loading state.
   // ===========================================================================
 
-  if (
-    isLoading &&
-    !overview &&
-    !challengeOverview
-  ) {
+  useEffect(() => {
+    setChallengesLoaded(false);
+
+    if (activeTab === "challenges") {
+      loadChallenges();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePair?.id]);
+
+  // ===========================================================================
+  // TAB SWITCH — LOADS CHALLENGES ONLY THE FIRST TIME IT'S OPENED
+  // ===========================================================================
+
+  const handleTabChange = (tab: StatsTab) => {
+    setActiveTab(tab);
+
+    if (
+      tab === "challenges" &&
+      !challengesLoaded &&
+      !isChallengesLoading
+    ) {
+      loadChallenges();
+    }
+  };
+
+  // ===========================================================================
+  // PULL TO REFRESH — REFRESHES WHICHEVER TAB IS CURRENTLY OPEN
+  // ===========================================================================
+
+  const handleRefresh = () => {
+    if (activeTab === "learning") {
+      loadLearning();
+    } else {
+      // Explicit user intent — bypasses the challengesLoaded cache.
+      loadChallenges();
+    }
+  };
+
+  // The native RefreshControl spinner should only appear for a
+  // background refresh of data that's already on screen (a real
+  // pull-to-refresh, or Learning's per-focus refresh). During
+  // Challenges' very first load there's nothing on screen yet —
+  // renderChallengesTab already shows its own centered spinner for
+  // that case, so tying RefreshControl to isChallengesLoading too
+  // produced two spinners at once. Gating on challengesLoaded here
+  // means the native spinner only shows once there's already a
+  // Challenges view underneath it being refreshed.
+  const isActiveTabRefreshing =
+    activeTab === "learning"
+      ? isLearningLoading
+      : isChallengesLoading && challengesLoaded;
+
+  // ===========================================================================
+  // INITIAL LOADING — ONLY EVER GATED ON LEARNING'S FIRST LOAD
+  // ===========================================================================
+
+  if (isLearningLoading && !overview) {
     return (
-      <SafeAreaView style={shared.center}>
+      <SafeAreaView
+      style={shared.center}
+      edges={["left", "right", "bottom"]}
+    >
         <ActivityIndicator
           size="large"
           color={colors.primary}
@@ -419,8 +520,55 @@ export default function StatisticsScreen() {
   };
 
   // ===========================================================================
+  // CHALLENGES TAB
+  //
+  // Only ever shows its own inline spinner on the very first load
+  // (isChallengesLoading && !challengesLoaded). A background refresh
+  // of already-loaded data (e.g. via pull-to-refresh) keeps showing
+  // the existing view instead of flashing a full loading state — and
+  // in that case the native RefreshControl spinner above is the only
+  // one visible (see isActiveTabRefreshing).
+  // ===========================================================================
+
+  const renderChallengesTab = () => {
+    if (isChallengesLoading && !challengesLoaded) {
+      return (
+        <View
+          style={{
+            paddingVertical: 50,
+            alignItems: "center",
+          }}
+        >
+          <ActivityIndicator
+            size="large"
+            color={colors.primary}
+          />
+        </View>
+      );
+    }
+
+    return (
+      <ChallengesStatsView
+        overview={challengeOverview}
+        languages={challengeLanguages}
+        modes={challengeModes}
+        skills={challengeSkills}
+        trend={challengeTrend}
+        recentActivity={
+          recentChallengeActivity
+        }
+      />
+    );
+  };
+
+  // ===========================================================================
   // SCREEN
   // ===========================================================================
+
+  const activeError =
+    activeTab === "learning"
+      ? learningError
+      : challengesError;
 
   return (
     <SafeAreaView
@@ -429,6 +577,7 @@ export default function StatisticsScreen() {
         backgroundColor:
           colors.background,
       }}
+      edges={["left", "right", "bottom"]}
     >
       <ScrollView
         contentContainerStyle={{
@@ -437,8 +586,10 @@ export default function StatisticsScreen() {
         }}
         refreshControl={
           <RefreshControl
-            refreshing={isLoading}
-            onRefresh={load}
+            refreshing={
+              isActiveTabRefreshing
+            }
+            onRefresh={handleRefresh}
             tintColor={
               colors.primary
             }
@@ -449,7 +600,7 @@ export default function StatisticsScreen() {
         {/* ERROR                                                              */}
         {/* ------------------------------------------------------------------ */}
 
-        {error && (
+        {activeError && (
           <Text
             style={[
               shared.error,
@@ -458,7 +609,7 @@ export default function StatisticsScreen() {
               },
             ]}
           >
-            {error}
+            {activeError}
           </Text>
         )}
 
@@ -468,36 +619,17 @@ export default function StatisticsScreen() {
 
         <StatsTabs
           value={activeTab}
-          onChange={setActiveTab}
+          onChange={handleTabChange}
         />
 
         {/* ------------------------------------------------------------------ */}
         {/* CONTENT                                                            */}
         {/* ------------------------------------------------------------------ */}
 
-        {activeTab === "learning" ? (
-          renderLearningTab()
-        ) : (
-          <ChallengesStatsView
-            overview={
-              challengeOverview
-            }
-            modes={
-              challengeModes
-            }
-            skills={
-              challengeSkills
-            }
-            trend={
-              challengeTrend
-            }
-            recentActivity={
-              recentChallengeActivity
-            }
-          />
-        )}
+        {activeTab === "learning"
+          ? renderLearningTab()
+          : renderChallengesTab()}
       </ScrollView>
     </SafeAreaView>
   );
 }
-

@@ -8,6 +8,7 @@ import type {
   TrendPoint,
   ProgressEntry,
   ChallengeStatsOverview,
+  ChallengeLanguageStat,
   ChallengeModeStat,
   ChallengeSkillStat,
   ChallengeTrendPoint,
@@ -89,39 +90,75 @@ export function getRecentProgress(
 
 // ============================================================================
 // Challenge statistics
+//
+// All five accept an optional languagePairId, same convention as the
+// Learning functions above: omit it to aggregate across every
+// language pair the user has (e.g. when no pair is active yet).
 // ============================================================================
 
-export function getGameStatsOverview(): Promise<ChallengeStatsOverview> {
+export function getGameStatsOverview(
+  languagePairId?: number
+): Promise<ChallengeStatsOverview> {
   return api.get<ChallengeStatsOverview>(
-    "/stats/games/overview/"
+    "/stats/games/overview/",
+    {
+      language_pair: languagePairId,
+    }
   );
 }
 
-export function getGameStatsModes(): Promise<ChallengeModeStat[]> {
+// Mirrors getLanguageStats() on the Learning side — always returns
+// every pair the user has, regardless of which one is active.
+export function getGameStatsLanguages(): Promise<
+  ChallengeLanguageStat[]
+> {
+  return api.get<ChallengeLanguageStat[]>(
+    "/stats/games/languages/"
+  );
+}
+
+export function getGameStatsModes(
+  languagePairId?: number
+): Promise<ChallengeModeStat[]> {
   return api.get<ChallengeModeStat[]>(
-    "/stats/games/modes/"
+    "/stats/games/modes/",
+    {
+      language_pair: languagePairId,
+    }
   );
 }
 
-export function getGameStatsSkills(): Promise<ChallengeSkillStat[]> {
+export function getGameStatsSkills(
+  languagePairId?: number
+): Promise<ChallengeSkillStat[]> {
   return api.get<ChallengeSkillStat[]>(
-    "/stats/games/skills/"
+    "/stats/games/skills/",
+    {
+      language_pair: languagePairId,
+    }
   );
 }
 
-export function getGameStatsTrend(): Promise<ChallengeTrendPoint[]> {
+export function getGameStatsTrend(
+  languagePairId?: number
+): Promise<ChallengeTrendPoint[]> {
   return api.get<ChallengeTrendPoint[]>(
-    "/stats/games/trend/"
+    "/stats/games/trend/",
+    {
+      language_pair: languagePairId,
+    }
   );
 }
 
 export function getRecentGameActivity(
-  limit = 8
+  limit = 8,
+  languagePairId?: number
 ): Promise<ChallengeActivityEntry[]> {
   return api.get<ChallengeActivityEntry[]>(
     "/stats/games/recent/",
     {
       limit,
+      language_pair: languagePairId,
     }
   );
 }

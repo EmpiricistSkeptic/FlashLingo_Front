@@ -43,23 +43,74 @@ export default function LanguagePicker({
           <FlatList
             data={LANGUAGE_OPTIONS}
             keyExtractor={(item) => item.code}
+            contentContainerStyle={{
+              paddingHorizontal: 16,
+              paddingTop: 4,
+              paddingBottom: 8,
+            }}
             renderItem={({ item }) => {
               const disabled = item.code === excludeCode;
               const isSelected = item.code === selected;
+
               return (
                 <TouchableOpacity
                   disabled={disabled}
-                  style={[
-                    shared.row,
-                    { marginHorizontal: 16, borderRadius: 12, opacity: disabled ? 0.3 : 1 },
-                    isSelected && shared.rowActive,
-                  ]}
+                  activeOpacity={0.7}
                   onPress={() => onSelect(item.code)}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                    marginBottom: 8,
+                    padding: 12,
+                    borderRadius: 14,
+                    borderWidth: 1,
+                    borderColor: isSelected
+                      ? colors.primary
+                      : colors.border,
+                    backgroundColor: isSelected
+                      ? colors.primary + "12"
+                      : colors.surface,
+                    opacity: disabled ? 0.35 : 1,
+                  }}
                 >
-                  <Text style={[shared.rowText, isSelected && { color: colors.primary, fontWeight: "600" }]}>
+                  <View
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 11,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: isSelected
+                        ? colors.primary + "22"
+                        : colors.background,
+                    }}
+                  >
+                    <Text style={{ fontSize: 19 }}>
+                      {item.flag}
+                    </Text>
+                  </View>
+
+                  <Text
+                    style={{
+                      flex: 1,
+                      fontSize: 16,
+                      fontWeight: isSelected ? "700" : "500",
+                      color: isSelected
+                        ? colors.primary
+                        : colors.text,
+                    }}
+                  >
                     {item.label}
                   </Text>
-                  {isSelected && <Feather name="check" size={20} color={colors.primary} />}
+
+                  {isSelected && (
+                    <Feather
+                      name="check-circle"
+                      size={20}
+                      color={colors.primary}
+                    />
+                  )}
                 </TouchableOpacity>
               );
             }}

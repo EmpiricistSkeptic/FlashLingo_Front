@@ -50,3 +50,10 @@ export interface DueFlashcardsResponse {
   due: FlashcardState[];
   new: FlashcardState[];
 }
+
+export interface DuplicateFlashcard {
+  id: number;
+  text: string;
+  translations: string[];
+  categories: { id: number; name: string }[];
+}

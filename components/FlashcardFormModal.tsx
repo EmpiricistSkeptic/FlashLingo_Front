@@ -25,7 +25,12 @@ import * as categoryService from "../services/categories";
 import * as flashcardService from "../services/flashcards";
 import { ApiClientError } from "../services/api";
 
-import type { Flashcard } from "../types/flashcard";
+import DuplicateWarning from "../components/DuplicateWarning";
+
+import type {
+  Flashcard,
+  DuplicateFlashcard,
+} from "../types/flashcard";
 
 const AUTO_TRANSLATE_DELAY_MS = 800;
 
@@ -56,8 +61,14 @@ export default function FlashcardFormModal({
   const [examplesInput, setExamplesInput] = useState("");
   const [correction, setCorrection] = useState<string | null>(null);
 
-  const [translationsTouched, setTranslationsTouched] = useState(false);
-  const [examplesTouched, setExamplesTouched] = useState(false);
+  const [duplicates, setDuplicates] = useState<
+    DuplicateFlashcard[]
+  >([]);
+
+  const [translationsTouched, setTranslationsTouched] =
+    useState(false);
+  const [examplesTouched, setExamplesTouched] =
+    useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -102,6 +113,7 @@ export default function FlashcardFormModal({
       editingCard?.examples.join("\n") ?? ""
     );
     setCorrection(null);
+    setDuplicates([]);
     setTranslationsTouched(!!editingCard);
     setExamplesTouched(!!editingCard);
     setError(null);
@@ -169,6 +181,56 @@ export default function FlashcardFormModal({
     translationsTouched,
     examplesTouched,
     languagePairId,
+  ]);
+
+  /*
+   * DUPLICATE CHECK
+   *
+   * This is only an informational warning.
+   * It never blocks saving the flashcard.
+   *
+   * For editing, the current card ID is excluded from the search
+   * so the card doesn't find itself.
+   */
+  useEffect(() => {
+    if (!visible) return;
+
+    const word = debouncedText.trim();
+
+    if (word.length < 2) {
+      setDuplicates([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    flashcardService
+      .findDuplicates(
+        word,
+        languagePairId,
+        editingCard?.id
+      )
+      .then((result) => {
+        if (!cancelled) {
+          setDuplicates(result);
+        }
+      })
+      .catch(() => {
+        // Duplicate checking is non-critical.
+        // If it fails, simply hide the warning.
+        if (!cancelled) {
+          setDuplicates([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    debouncedText,
+    visible,
+    languagePairId,
+    editingCard?.id,
   ]);
 
   const handleSave = async () => {
@@ -362,6 +424,12 @@ export default function FlashcardFormModal({
                 </TouchableOpacity>
               </View>
             )}
+
+            {/* DUPLICATE WARNING */}
+            <DuplicateWarning
+              duplicates={duplicates}
+              currentCategoryId={categoryId}
+            />
           </View>
 
           {/* TRANSLATIONS */}
@@ -495,4 +563,6 @@ export default function FlashcardFormModal({
     </Modal>
   );
 }
+
+
 
